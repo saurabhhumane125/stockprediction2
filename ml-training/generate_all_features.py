@@ -1,9 +1,9 @@
 import os
 import pandas as pd
 
-from ta.momentum import RSIIndicator
-from ta.trend import MACD
-from ta.trend import EMAIndicator
+from ta.momentum import RSIIndicator, ROCIndicator
+from ta.trend import MACD, EMAIndicator, ADXIndicator
+from ta.volatility import AverageTrueRange, BollingerBands
 
 INPUT_DIR = "datasets/raw"
 OUTPUT_DIR = "datasets/features"
@@ -37,6 +37,53 @@ for file in os.listdir(INPUT_DIR):
         close=df["Close"],
         window=50
     ).ema_indicator()
+
+    df["ATR"] = AverageTrueRange(
+    high=df["High"],
+    low=df["Low"],
+    close=df["Close"]
+    ).average_true_range()
+
+    df["ADX"] = ADXIndicator(
+    high=df["High"],
+    low=df["Low"],
+    close=df["Close"]
+    ).adx()
+
+    bb = BollingerBands(
+    close=df["Close"],
+    window=20,
+    window_dev=2
+    )
+
+    df["BB_UPPER"] = bb.bollinger_hband()
+    df["BB_LOWER"] = bb.bollinger_lband()
+    df["BB_WIDTH"] = (
+    df["BB_UPPER"] - df["BB_LOWER"]
+    )
+
+    df["ROC"] = ROCIndicator(
+    close=df["Close"],
+    window=12
+    ).roc()
+
+    df["MOMENTUM"] = (
+    df["Close"] - df["Close"].shift(10)
+    )
+
+    df["DAILY_RETURN"] = (
+    df["Close"].pct_change()
+    )
+
+    df["VOLATILITY"] = (
+    df["DAILY_RETURN"]
+    .rolling(10)
+    .std()
+    )
+
+    df["VOLUME_CHANGE"] = (
+    df["Volume"].pct_change()
+    )
 
     output_path = os.path.join(
         OUTPUT_DIR,
