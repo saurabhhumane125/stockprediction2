@@ -3,11 +3,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import (
-    PredictionHistory,
-    Stock,
-)
+
 from app.core.exceptions import raise_http
+
+from app.services.prediction_history_service import (
+    prediction_history_service,
+)
 
 router = APIRouter(
     prefix="/history",
@@ -22,33 +23,9 @@ def get_history(
 
     try:
 
-        rows = (
-            db.query(
-                PredictionHistory,
-                Stock,
-            )
-            .join(
-                Stock,
-                PredictionHistory.stock_id == Stock.id,
-            )
-            .order_by(
-                PredictionHistory.created_at.desc()
-            )
-            .all()
+        return prediction_history_service.get_history(
+            db,
         )
-
-        return [
-            {
-                "id": history.id,
-                "symbol": stock.symbol,
-                "prediction": history.prediction,
-                "confidence": history.confidence,
-                "probability_buy": history.probability_buy,
-                "probability_sell": history.probability_sell,
-                "created_at": history.created_at,
-            }
-            for history, stock in rows
-        ]
 
     except Exception as e:
 
@@ -63,19 +40,10 @@ def get_stock_history(
 
     try:
 
-        rows = (
-            db.query(PredictionHistory)
-            .join(Stock)
-            .filter(
-                Stock.symbol == symbol.upper()
-            )
-            .order_by(
-                PredictionHistory.created_at.desc()
-            )
-            .all()
+        return prediction_history_service.get_stock_history(
+            db=db,
+            symbol=symbol,
         )
-
-        return rows
 
     except Exception as e:
 
@@ -90,19 +58,10 @@ def latest_prediction(
 
     try:
 
-        row = (
-            db.query(PredictionHistory)
-            .join(Stock)
-            .filter(
-                Stock.symbol == symbol.upper()
-            )
-            .order_by(
-                PredictionHistory.created_at.desc()
-            )
-            .first()
+        return prediction_history_service.get_latest_prediction(
+            db=db,
+            symbol=symbol,
         )
-
-        return row
 
     except Exception as e:
 

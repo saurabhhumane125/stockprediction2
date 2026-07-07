@@ -125,12 +125,66 @@ class LiveDataService:
             "VOLUME_CHANGE",
         ]
 
-        return (
-            df[feature_columns]
+        latest = df.iloc[-1]
+
+        sequence = (
+            df[
+                feature_columns
+            ]
             .tail(48)
             .values
             .tolist()
         )
+
+        latest_features = {
+
+            column: (
+                float(latest[column])
+                if pd.notna(latest[column])
+                else None
+            )
+
+            for column in feature_columns
+
+        }
+
+        latest_candle = {
+
+            "date": str(
+                latest["Date"].date()
+            ),
+
+            "open": float(
+                latest["Open"]
+            ),
+
+            "high": float(
+                latest["High"]
+            ),
+
+            "low": float(
+                latest["Low"]
+            ),
+
+            "close": float(
+                latest["Close"]
+            ),
+
+            "volume": float(
+                latest["Volume"]
+            ),
+
+        }
+
+        return {
+
+            "sequence": sequence,
+
+            "latest_features": latest_features,
+
+            "latest_candle": latest_candle,
+
+        }
 
 
 live_data_service = LiveDataService()

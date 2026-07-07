@@ -14,7 +14,20 @@ from app.routes.stocks import router as stocks_router
 from app.routes.dashboard import router as dashboard_router
 from app.routes.analytics import router as analytics_router
 
+from app.routes.history import router as history_router
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.config import settings
+
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+from app.core.exceptions import (
+    StockPredictionException,
+)
+
 from app.routes.backtesting import router as backtesting_router
+from app.routes.auth import router as auth_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -58,6 +71,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        settings.FRONTEND_URL,
+        
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(prediction_router)
 app.include_router(live_prediction_router)
 app.include_router(stocks_router)
@@ -67,6 +91,46 @@ app.include_router(
     analytics_router
 )
 app.include_router(backtesting_router)
+app.include_router(auth_router)
+app.include_router(history_router)
+
+@app.exception_handler(
+    StockPredictionException
+)
+async def stock_prediction_exception_handler(
+    request: Request,
+    exc: StockPredictionException,
+):
+
+    logger.error(
+        f"{request.method} {request.url.path} -> {exc.message}"
+    )
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "detail": exc.message,
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(
+    request: Request,
+    exc: Exception,
+):
+
+    logger.exception(
+        f"Unhandled exception during "
+        f"{request.method} {request.url.path}"
+    )
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal Server Error",
+        },
+    )
 
 @app.get("/")
 def root():

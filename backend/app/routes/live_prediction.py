@@ -1,7 +1,16 @@
-from fastapi import APIRouter
+from fastapi import (
+    APIRouter,
+    Depends,
+)
 
 from app.core.exceptions import raise_http
 from app.core.logger import logger
+from app.core.dependencies import (
+    get_current_user,
+)
+
+from app.models import User
+from app.schemas import PredictionResponse
 
 from app.database import SessionLocal
 from app.services.live_prediction_service import (
@@ -14,8 +23,19 @@ router = APIRouter(
 )
 
 
-@router.post("/live/{stock}")
-def predict_live(stock: str):
+@router.post(
+    "/live/{stock}",
+    response_model=PredictionResponse,
+)
+def predict_live(
+
+    stock: str,
+
+    current_user: User = Depends(
+        get_current_user
+    ),
+
+):
 
     db = SessionLocal()
 

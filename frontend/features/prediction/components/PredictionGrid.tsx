@@ -1,0 +1,1 @@
+export { ContentGrid as PredictionGrid } from "@/components/layout/ContentGrid";

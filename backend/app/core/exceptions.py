@@ -1,5 +1,7 @@
 from fastapi import HTTPException
 
+from app.core.logger import logger
+
 
 class StockPredictionException(Exception):
 
@@ -23,7 +25,9 @@ def raise_http(error: Exception):
             detail=error.message,
         )
 
+    logger.exception(error)
+
     raise HTTPException(
         status_code=500,
-        detail=str(error),
+        detail="Internal Server Error",
     )

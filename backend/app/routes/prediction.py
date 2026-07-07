@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from app.core.exceptions import raise_http
 
 from app.core.logger import logger

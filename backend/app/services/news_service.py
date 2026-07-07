@@ -4,7 +4,7 @@ from newsapi import NewsApiClient
 from sqlalchemy.orm import Session
 from app.core.logger import logger
 
-from app.config import NEWS_API_KEY
+from app.config import settings
 from app.models import News, Stock
 from app.services.sentiment_service import sentiment_service
 
@@ -14,7 +14,7 @@ class NewsService:
     def __init__(self):
 
         self.client = NewsApiClient(
-            api_key=NEWS_API_KEY
+            api_key=settings.NEWS_API_KEY
         )
 
     def sync_news(

@@ -5,6 +5,13 @@ from app.database import get_db
 from app.schemas import DashboardResponse
 from app.services.dashboard_service import dashboard_service
 
+
+from app.core.dependencies import (
+    get_current_user,
+)
+
+from app.models import User
+
 router = APIRouter(
     prefix="/dashboard",
     tags=["Dashboard"],
@@ -18,6 +25,9 @@ router = APIRouter(
 def dashboard(
     symbol: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(
+        get_current_user
+    ),
 ):
 
     data = dashboard_service.get_dashboard(

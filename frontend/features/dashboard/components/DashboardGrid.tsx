@@ -1,0 +1,1 @@
+export { ContentGrid as DashboardGrid } from "@/components/layout/ContentGrid";

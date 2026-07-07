@@ -1,5 +1,13 @@
 from sqlalchemy.orm import Session
 
+from app.services.market_regime_service import (
+    market_regime_service,
+)
+
+
+from app.services.explanation_service import (
+    explanation_service,
+)
 from app.models import (
     News,
     Stock,
@@ -30,13 +38,25 @@ class LivePredictionService:
         sync_news: bool = True,
     ):
 
-        features = live_data_service.fetch(
+        market_data = live_data_service.fetch(
             stock,
         )
 
+        sequence = market_data[
+            "sequence"
+        ]
+
+        latest_features = market_data[
+            "latest_features"
+        ]
+
+        latest_candle = market_data[
+            "latest_candle"
+        ]
+
         prediction = prediction_service.predict(
             stock=stock,
-            feature_rows=features,
+            feature_rows=sequence,
         )
 
         if sync_news:
@@ -98,6 +118,22 @@ class LivePredictionService:
                 "final_reason": "Prediction generated without news sentiment.",
 
             }
+        
+        result["latest_features"] = latest_features
+
+        result["latest_candle"] = latest_candle
+
+        result["explanation"] = (
+            explanation_service.explain(
+                latest_features
+            )
+        )
+
+        result["market_regime"] = (
+            market_regime_service.analyze(
+                latest_features
+            )
+        )
 
         result["stock"] = stock.upper()
 

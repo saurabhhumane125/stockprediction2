@@ -1,9 +1,11 @@
 from app.core.logger import logger
 from app.database import SessionLocal
 from app.core.model_loader import artifacts
+
 from app.services.evaluation_job_service import (
     evaluation_job_service,
 )
+
 from app.services.historical_data_service import (
     historical_data_service,
 )
@@ -40,16 +42,15 @@ def update_market_data():
 
     try:
 
-        logger.info(
-            "Market synchronization started."
-        )
-
-        print("=" * 60)
-        print("Market Scheduler Started")
+        logger.info("=" * 60)
+        logger.info("Market synchronization started.")
 
         for stock in STOCKS:
 
-            print(f"Syncing {stock}")
+            logger.info(
+                "Synchronizing %s",
+                stock,
+            )
 
             historical_data_service.sync_stock(
                 db=db,
@@ -60,32 +61,34 @@ def update_market_data():
                 db=db,
                 symbol=stock,
             )
+
             live_prediction_service.predict(
                 db=db,
                 stock=stock,
                 sync_news=False,
             )
 
-        print(
-            "Evaluating pending predictions..."
+        logger.info(
+            "Evaluating pending predictions."
         )
 
         evaluation_job_service.evaluate_pending_predictions()
 
-        print(
+        logger.info(
             "Prediction evaluation completed."
         )
-
-        print("Market Scheduler Finished")
-        print("=" * 60)
 
         logger.info(
             "Market synchronization completed."
         )
 
-    except Exception as e:
+        logger.info("=" * 60)
 
-        logger.exception(e)
+    except Exception as error:
+
+        logger.exception(
+            "Market synchronization failed."
+        )
 
         db.rollback()
 
