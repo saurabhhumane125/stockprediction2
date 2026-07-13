@@ -319,3 +319,17 @@ class TokenResponse(BaseModel):
     access_token: str
 
     token_type: str
+
+class UploadResponse(BaseModel):
+
+    filename: str
+
+    hash: str
+
+    size_bytes: int
+
+    mime_type: str
+
+    status: str
+
+    message: Optional[str] = None

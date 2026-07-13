@@ -28,6 +28,7 @@ from app.core.exceptions import (
 
 from app.routes.backtesting import router as backtesting_router
 from app.routes.auth import router as auth_router
+from app.routes.upload import router as upload_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -93,6 +94,7 @@ app.include_router(
 app.include_router(backtesting_router)
 app.include_router(auth_router)
 app.include_router(history_router)
+app.include_router(upload_router)
 
 @app.exception_handler(
     StockPredictionException

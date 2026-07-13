@@ -1,0 +1,11 @@
+{
+    "model_version": "v1.0.0-legacy",
+    "registration_timestamp": "2026-07-13T16:23:45.822953+00:00",
+    "artifacts": {
+        "best_model.keras": "07178db8581abe3bc12a35a8049cd6333ff2bd4d751b80db5dd587f0bcff9f59",
+        "feature_scaler.pkl": "12dfc90dadf016ef9148675525dea60190f5832210dd0cfe1b6876bbb74bd17e",
+        "calibrator.pkl": "63e9a9c7b841546540d8edd7d5324ec401ab22c1b79b88190845abe6cd00a3ac",
+        "evaluation_report.json": "a3bbd40e18012b5bddbb0ef42bcc798d85d9b18c6f9419a0d647cd43f42c3289",
+        "calibration_report.json": "1d974e45af4f96142be97eb8ee37cf3b3da1a761e3ae63decb0fee97a2af808d"
+    }
+}

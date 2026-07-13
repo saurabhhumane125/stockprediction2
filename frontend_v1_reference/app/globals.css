@@ -1,0 +1,266 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-heading: "Space Grotesk", system-ui, sans-serif;
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+}
+
+@plugin "tailwindcss-animate";
+
+:root {
+
+  /* ===========================
+     Brand Colors
+  =========================== */
+
+  --background: #EDF1F5;
+  --surface: #FFFFFF;
+  --surface-secondary: #F7F9FC;
+  --surface-elevated: #FAFBFC;
+  --foreground: #11131A;
+  --text-secondary: #5B6473;
+  --text-muted: #8B95A5;
+  --primary: #0066FF;
+  --primary-hover: #0055D4;
+  --primary-subtle: rgba(0, 102, 255, 0.08);
+  --accent: #B4FF00;
+  --accent-secondary: #C3D809;
+  --danger: #FF3B3B;
+  --danger-subtle: #FFF0F0;
+  --border: #E8EDF2;
+  --border-subtle: #F0F4F8;
+  --ring: rgba(0, 102, 255, 0.2);
+
+  /* ===========================
+     Radius
+  =========================== */
+
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-full: 9999px;
+
+  /* ===========================
+     Shadows & Effects
+  =========================== */
+
+  --shadow-xs: 0 1px 2px rgba(17, 19, 26, 0.04);
+  --shadow-sm: 0 1px 3px rgba(17, 19, 26, 0.04), 0 2px 8px rgba(17, 19, 26, 0.02);
+  --shadow-md: 0 2px 4px rgba(17, 19, 26, 0.02), 0 4px 16px rgba(17, 19, 26, 0.04);
+  --shadow-lg: 0 4px 8px rgba(17, 19, 26, 0.03), 0 12px 32px rgba(17, 19, 26, 0.06);
+  --shadow-xl: 0 8px 16px rgba(17, 19, 26, 0.04), 0 24px 48px rgba(17, 19, 26, 0.08);
+
+  /* ===========================
+     Transitions
+  =========================== */
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+}
+
+/* ===========================
+   Reset
+=========================== */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+button {
+  cursor: pointer;
+  font: inherit;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+/* ===========================
+   Selection
+=========================== */
+
+::selection {
+  background: var(--primary);
+  color: white;
+}
+
+/* ===========================
+   Focus
+=========================== */
+
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ring);
+  transition: box-shadow var(--duration-fast) var(--ease-out-expo);
+}
+
+/* ===========================
+   Scrollbar
+=========================== */
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D0D7E0;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #B0BAC5;
+}
+
+/* ===========================
+   Transitions
+=========================== */
+
+.transition-default {
+  transition:
+    background-color var(--duration-fast) var(--ease-out-expo),
+    color var(--duration-fast) var(--ease-out-expo),
+    border-color var(--duration-fast) var(--ease-out-expo),
+    box-shadow var(--duration-fast) var(--ease-out-expo),
+    transform var(--duration-fast) var(--ease-out-expo),
+    opacity var(--duration-fast) var(--ease-out-expo);
+}
+
+/* ===========================
+   Animations
+=========================== */
+
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.animate-page-enter {
+  animation: fadeSlideUp 0.35s var(--ease-out-expo) both;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s ease both;
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* ===========================
+   Skeleton
+=========================== */
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #E8EDF2 25%,
+    #F2F5F8 50%,
+    #E8EDF2 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* ===========================
+   Glass Effect
+=========================== */
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* ===========================
+   Number / Data Typography
+=========================== */
+
+.font-tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}

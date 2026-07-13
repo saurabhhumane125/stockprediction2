@@ -89,3 +89,38 @@ class ModelArtifacts:
 
 
 artifacts = ModelArtifacts()
+
+
+class MLEngineAdapter:
+    """
+    Adapter to bridge the backend to the Production ML Engine.
+    Uses dynamic path injection to resolve the sibling ml_engine package safely
+    without polluting the global namespace or causing fatal import errors.
+    """
+    def __init__(self):
+        self.registry_manager = None
+        self.inference_engine = None
+        self.is_available = False
+        
+        try:
+            import sys
+            import os
+            
+            project_root = str(Path(__file__).resolve().parents[3])
+            if project_root not in sys.path:
+                sys.path.append(project_root)
+                
+            from ml_engine.registry.manager import RegistryManager
+            from ml_engine.inference.engine import ProductionInferenceEngine
+            
+            registry_path = os.path.join(project_root, "ml_data", "registry")
+            if os.path.exists(registry_path):
+                self.registry_manager = RegistryManager(registry_base_path=registry_path)
+                self.inference_engine = ProductionInferenceEngine(registry_manager=self.registry_manager)
+                self.is_available = True
+            
+        except Exception as e:
+            from app.core.logger import logger
+            logger.warning(f"ML Engine Adapter failed to initialize: {e}. Relying on Legacy.")
+
+ml_adapter = MLEngineAdapter()

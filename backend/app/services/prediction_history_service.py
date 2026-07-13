@@ -44,17 +44,8 @@ class PredictionHistoryService:
         if latest_price is None:
             return None
 
-        existing_prediction = (
-            db.query(PredictionHistory)
-            .filter(
-                PredictionHistory.stock_id == stock.id,
-                PredictionHistory.prediction_date == latest_price.date,
-            )
-            .first()
-        )
-
-        if existing_prediction:
-            return existing_prediction
+        # We no longer block multiple predictions on the same date.
+        # Every inference request will create a new unique record.
 
         history = PredictionHistory(
             stock_id=stock.id,

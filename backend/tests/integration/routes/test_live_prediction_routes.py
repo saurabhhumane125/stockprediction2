@@ -13,6 +13,7 @@ def test_live_prediction_success(client):
         return_value={
             "prediction": "BUY",
             "confidence": 0.95,
+            "stock": "RELIANCE"
         }
     )
 

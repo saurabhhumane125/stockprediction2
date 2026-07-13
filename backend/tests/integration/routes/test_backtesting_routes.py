@@ -16,9 +16,17 @@ def test_backtesting_success(client):
 
     backtesting_service.summary = MagicMock(
         return_value={
+            "stock": "RELIANCE",
+            "total_predictions": 50,
+            "evaluated_predictions": 50,
+            "pending_predictions": 0,
             "accuracy": 78.0,
             "wins": 39,
             "losses": 11,
+            "win_rate": 78.0,
+            "loss_rate": 22.0,
+            "average_confidence": 0.85,
+            "latest_prediction": None
         }
     )
 
