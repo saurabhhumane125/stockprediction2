@@ -1,0 +1,50 @@
+{
+    "universe": "CORE",
+    "version": "v1.0",
+    "generated_at": "2026-07-15T14:56:20.693032+00:00",
+    "expected_count": 5,
+    "actual_count": 5,
+    "missing_tickers": [],
+    "ticker_stats": {
+        "HDFCBANK.NS": {
+            "rows": 1594,
+            "start_date": "2020-02-05",
+            "end_date": "2026-07-13",
+            "missing_days_pct": 5.062537224538416,
+            "dividends_events": 7,
+            "split_events": 1
+        },
+        "ICICIBANK.NS": {
+            "rows": 1594,
+            "start_date": "2020-02-05",
+            "end_date": "2026-07-13",
+            "missing_days_pct": 5.062537224538416,
+            "dividends_events": 5,
+            "split_events": 0
+        },
+        "INFY.NS": {
+            "rows": 1594,
+            "start_date": "2020-02-05",
+            "end_date": "2026-07-13",
+            "missing_days_pct": 5.062537224538416,
+            "dividends_events": 13,
+            "split_events": 0
+        },
+        "RELIANCE.NS": {
+            "rows": 1594,
+            "start_date": "2020-02-05",
+            "end_date": "2026-07-13",
+            "missing_days_pct": 5.062537224538416,
+            "dividends_events": 7,
+            "split_events": 1
+        },
+        "TCS.NS": {
+            "rows": 1594,
+            "start_date": "2020-02-05",
+            "end_date": "2026-07-13",
+            "missing_days_pct": 5.062537224538416,
+            "dividends_events": 26,
+            "split_events": 0
+        }
+    }
+}

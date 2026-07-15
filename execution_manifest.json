@@ -1,0 +1,13 @@
+{
+    "python_version": "3.11.9",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "torch_version": "2.7.1",
+    "cuda_version": "NOT_INSTALLED",
+    "numpy_version": "1.26.4",
+    "pandas_version": "3.0.3",
+    "scikit_learn_version": "1.7.1",
+    "optuna_version": "4.9.0",
+    "config_hash": "1d0a716042f3fa39ae778a6a50ee0f093f2c550d366e0cd2464262cfffe70484",
+    "dataset_version": "CORE/v1.0",
+    "registry_version": "LATEST"
+}

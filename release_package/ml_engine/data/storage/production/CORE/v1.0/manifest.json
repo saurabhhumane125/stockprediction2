@@ -1,0 +1,32 @@
+{
+    "dataset_version": "v1.0",
+    "generation_timestamp": "2026-07-15T14:56:20.691851+00:00",
+    "universe": "CORE",
+    "ticker_list": [
+        "HDFCBANK.NS",
+        "ICICIBANK.NS",
+        "INFY.NS",
+        "RELIANCE.NS",
+        "TCS.NS"
+    ],
+    "checksums": "2c20fc3123648dc722c36bc7c2eaf49320a9cd65d7627da15d6a4f0efb0a2e89",
+    "dataset_statistics": {
+        "total_rows_downloaded": 8100,
+        "total_rows_cleaned": 8100,
+        "total_rows_removed": 0,
+        "total_rows_final": 7970,
+        "features_generated": 24,
+        "missing_values_imputed": 0,
+        "execution_time_seconds": 3.8127691745758057,
+        "rows_per_ticker": {
+            "ICICIBANK.NS": 1594,
+            "INFY.NS": 1594,
+            "HDFCBANK.NS": 1594,
+            "TCS.NS": 1594,
+            "RELIANCE.NS": 1594
+        },
+        "failed_tickers": [],
+        "download_throughput_s": 3.6509482860565186,
+        "pipeline_throughput_s": 0.15253353118896484
+    }
+}

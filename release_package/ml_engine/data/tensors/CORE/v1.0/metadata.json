@@ -1,0 +1,46 @@
+{
+    "dataset_version": "CORE/v1.0",
+    "generation_timestamp": "2026-07-15T15:36:08.196597Z",
+    "sequence_length": 48,
+    "forecast_horizon": 1,
+    "features": {
+        "count": 23,
+        "order": [
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "dividends",
+            "stock_splits",
+            "daily_return",
+            "ema_short",
+            "ema_long",
+            "rsi",
+            "macd_line",
+            "macd_signal",
+            "macd_histogram",
+            "bb_upper",
+            "bb_lower",
+            "bb_width",
+            "atr",
+            "adx",
+            "roc",
+            "momentum",
+            "volatility",
+            "volume_change"
+        ]
+    },
+    "dimensions": {
+        "train_samples": 2130,
+        "val_samples": 1850,
+        "test_samples": 3750
+    },
+    "statistics": {
+        "target_distribution_train": {
+            "0": 963,
+            "1": 1167
+        }
+    },
+    "configuration_hash": "1d0a716042f3fa39ae778a6a50ee0f093f2c550d366e0cd2464262cfffe70484"
+}
