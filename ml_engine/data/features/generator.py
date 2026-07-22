@@ -65,6 +65,16 @@ class FeatureGenerator:
         df = self.add_volatility(df, self.config["VOLATILITY_PERIOD"])
         df = self.add_volume_change(df)
         
+        # Phase 1 Features
+        df = self.add_return_lags(df, lags=[1, 2, 3, 5])
+        df = self.add_rolling_returns(df, periods=[5, 10])
+        df = self.add_rolling_volatilities(df, periods=[5, 10])
+        
+        # Phase 2 Volume-Price Features
+        df = self.add_obv(df)
+        df = self.add_cmf(df, period=20)
+        df = self.add_rolling_vwap(df, period=20)
+        
         # Drop rows where features could not be calculated (NaNs due to lookback periods)
         initial_rows = len(df)
         df = df.dropna()
@@ -199,3 +209,74 @@ class FeatureGenerator:
         self._register_metadata("volume_change", "Daily Volume Percentage Change", "float64")
         logger.debug(f"add_volume_change took {time.time()-t0:.4f}s")
         return df
+
+    def add_return_lags(self, df: pd.DataFrame, lags: List[int]) -> pd.DataFrame:
+        t0 = time.time()
+        if "daily_return" not in df.columns:
+            df["daily_return"] = df["close"].pct_change()
+        
+        for lag in lags:
+            col_name = f"return_lag_{lag}"
+            df[col_name] = df["daily_return"].shift(lag)
+            self._register_metadata(col_name, f"Daily return lagged by {lag} days", "float64")
+            
+        logger.debug(f"add_return_lags took {time.time()-t0:.4f}s")
+        return df
+
+    def add_rolling_returns(self, df: pd.DataFrame, periods: List[int]) -> pd.DataFrame:
+        t0 = time.time()
+        if "daily_return" not in df.columns:
+            df["daily_return"] = df["close"].pct_change()
+            
+        for period in periods:
+            col_name = f"rolling_return_{period}"
+            df[col_name] = df["daily_return"].rolling(window=period).mean()
+            self._register_metadata(col_name, f"Rolling mean of daily returns over {period} days", "float64")
+            
+        logger.debug(f"add_rolling_returns took {time.time()-t0:.4f}s")
+        return df
+
+    def add_rolling_volatilities(self, df: pd.DataFrame, periods: List[int]) -> pd.DataFrame:
+        t0 = time.time()
+        if "daily_return" not in df.columns:
+            df["daily_return"] = df["close"].pct_change()
+            
+        for period in periods:
+            col_name = f"rolling_volatility_{period}"
+            df[col_name] = df["daily_return"].rolling(window=period).std() * np.sqrt(252)
+            self._register_metadata(col_name, f"Annualized rolling volatility over {period} days", "float64", "Positive")
+            
+        logger.debug(f"add_rolling_volatilities took {time.time()-t0:.4f}s")
+        return df
+
+    def add_obv(self, df: pd.DataFrame) -> pd.DataFrame:
+        t0 = time.time()
+        direction = np.sign(df["close"].diff())
+        # Replace NaN with 0 for the first row
+        direction = direction.fillna(0)
+        df["obv"] = (direction * df["volume"]).cumsum()
+        self._register_metadata("obv", "On Balance Volume (OBV)", "float64")
+        logger.debug(f"add_obv took {time.time()-t0:.4f}s")
+        return df
+
+    def add_cmf(self, df: pd.DataFrame, period: int) -> pd.DataFrame:
+        t0 = time.time()
+        high_low = df["high"] - df["low"]
+        # Handle zero division if high == low
+        mfm = np.where(high_low == 0.0, 0.0, ((df["close"] - df["low"]) - (df["high"] - df["close"])) / high_low)
+        mfv = mfm * df["volume"]
+        df["cmf"] = pd.Series(mfv).rolling(window=period).sum() / df["volume"].rolling(window=period).sum()
+        self._register_metadata("cmf", f"Chaikin Money Flow (period={period})", "float64", "[-1, 1]")
+        logger.debug(f"add_cmf took {time.time()-t0:.4f}s")
+        return df
+
+    def add_rolling_vwap(self, df: pd.DataFrame, period: int) -> pd.DataFrame:
+        t0 = time.time()
+        typical_price = (df["high"] + df["low"] + df["close"]) / 3.0
+        vp = typical_price * df["volume"]
+        df[f"rolling_vwap_{period}"] = vp.rolling(window=period).sum() / df["volume"].rolling(window=period).sum()
+        self._register_metadata(f"rolling_vwap_{period}", f"Rolling Volume Weighted Average Price (period={period})", "float64", "Positive")
+        logger.debug(f"add_rolling_vwap took {time.time()-t0:.4f}s")
+        return df
+
+
