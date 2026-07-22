@@ -143,6 +143,23 @@ def main():
         
     stats["download_throughput_s"] = time.time() - t0_dl
     
+    # 2.5 Benchmark Downloader
+    logger.info("=== STAGE 2.5: Benchmark Downloader ===")
+    # Find the earliest start and latest end date from all groups, defaulting to the provided arguments
+    global_start = min([s for (s, e) in date_groups.keys()] + [args.start_date])
+    global_end = max([e for (s, e) in date_groups.keys()] + [args.end_date])
+    
+    benchmark_tickers = ["^NSEI", "^INDIAVIX"]
+    market_data = downloader.download_parallel(benchmark_tickers, global_start, global_end)
+    
+    if "^NSEI" not in market_data or market_data["^NSEI"].empty:
+        logger.error("Failed to download NIFTY50 (^NSEI) benchmark. Aborting.")
+        sys.exit(1)
+        
+    if "^INDIAVIX" not in market_data or market_data["^INDIAVIX"].empty:
+        logger.error("Failed to download INDIAVIX (^INDIAVIX) benchmark. Aborting.")
+        sys.exit(1)
+    
     # Process each ticker sequentially through pipeline to ensure Fail-Fast
     logger.info("=== STAGE 3-7: Pipeline Execution ===")
     
@@ -175,7 +192,7 @@ def main():
             continue
             
         # 5. Feature Generation
-        feat_df = feat_gen.generate_all_features(clean_df)
+        feat_df = feat_gen.generate_all_features(clean_df, market_data=market_data)
         
         # 6. Feature Validation
         is_valid_feat, report_feat = validator.validate(feat_df, "engineered_features")

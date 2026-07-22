@@ -55,6 +55,16 @@ class VisionFeaturePipeline:
                 end_date=date_window.end_date, 
                 interval=date_window.interval
             )
+            
+            # Fetch benchmark market data using identical date resolution
+            market_data = {}
+            for benchmark in ["^NSEI", "^INDIAVIX"]:
+                market_data[benchmark] = provider.download(
+                    benchmark,
+                    start_date=date_window.start_date,
+                    end_date=date_window.end_date,
+                    interval=date_window.interval
+                )
         except Exception as e:
             logger.error(f"Provider failure during feature generation: {e}")
             return VisionFeatureSet(
@@ -67,7 +77,7 @@ class VisionFeaturePipeline:
                 warnings=[f"Provider failure: {e}"]
             )
 
-        if df.empty:
+        if df.empty or market_data["^NSEI"].empty or market_data["^INDIAVIX"].empty:
             return VisionFeatureSet(
                 session_id=session.request_id,
                 features=[],
@@ -75,14 +85,16 @@ class VisionFeaturePipeline:
                 feature_hash="",
                 provenance=[],
                 is_valid=False,
-                warnings=["Provider returned empty dataset for the requested window."]
+                warnings=["Provider returned empty dataset for the requested window or benchmark."]
             )
 
         # Truncate at exact target_dt to simulate what the model would see at that exact moment
         df = df[df.index <= target_dt]
+        market_data["^NSEI"] = market_data["^NSEI"][market_data["^NSEI"].index <= target_dt]
+        market_data["^INDIAVIX"] = market_data["^INDIAVIX"][market_data["^INDIAVIX"].index <= target_dt]
 
         # Generate all features using the single source of truth
-        df_features = self.feature_generator.generate_all_features(df)
+        df_features = self.feature_generator.generate_all_features(df, market_data=market_data)
         
         # Ensure target_dt actually exists in the truncated dataframe
         if target_dt not in df_features.index:

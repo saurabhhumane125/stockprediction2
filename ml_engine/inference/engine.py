@@ -86,9 +86,9 @@ class ProductionInferenceEngine:
             
         if len(features.shape) != 2:
             raise InferenceInputError(f"Expected 2D array (samples, features). Received shape: {features.shape}")
-            
-        if features.shape[1] != inference_config.EXPECTED_FEATURES:
-            raise InferenceInputError(f"Expected {inference_config.EXPECTED_FEATURES} features. Received: {features.shape[1]}")
+        expected_features = getattr(self.scaler, 'n_features_in_', None)
+        if expected_features and features.shape[1] != expected_features:
+            raise InferenceInputError(f"Expected {expected_features} features. Received: {features.shape[1]}")
             
         if len(features) > inference_config.MAX_BATCH_SIZE:
             raise InferenceInputError(f"Batch size {len(features)} exceeds maximum {inference_config.MAX_BATCH_SIZE}")

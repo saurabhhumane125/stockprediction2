@@ -42,7 +42,7 @@ class FeatureGenerator:
             "expected_range": expected_range
         })
 
-    def generate_all_features(self, df: pd.DataFrame) -> pd.DataFrame:
+    def generate_all_features(self, df: pd.DataFrame, market_data: Dict[str, pd.DataFrame] = None) -> pd.DataFrame:
         """
         Orchestrator that applies all approved indicators in order.
         """
@@ -75,6 +75,10 @@ class FeatureGenerator:
         df = self.add_cmf(df, period=20)
         df = self.add_rolling_vwap(df, period=20)
         
+        # Phase 3 Market Context Features
+        if market_data is not None:
+            df = self.add_market_features(df, market_data)
+        
         # Drop rows where features could not be calculated (NaNs due to lookback periods)
         initial_rows = len(df)
         df = df.dropna()
@@ -92,6 +96,50 @@ class FeatureGenerator:
         self._register_metadata("daily_return", "Percentage change from previous close", "float64")
         logger.debug(f"add_daily_return took {time.time()-t0:.4f}s")
         return df
+
+    def add_market_features(self, df: pd.DataFrame, market_data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+        t0 = time.time()
+        
+        # Ensure NIFTY50 and INDIAVIX exist
+        if "^NSEI" not in market_data or "^INDIAVIX" not in market_data:
+            raise ValueError("Missing ^NSEI or ^INDIAVIX in market_data.")
+            
+        nifty = market_data["^NSEI"]
+        vix = market_data["^INDIAVIX"]
+        
+        if nifty.empty or vix.empty:
+            raise ValueError("Insufficient market data for benchmark features.")
+            
+        # NIFTY Features (calculated on the benchmark frame directly before merging)
+        nifty_features = pd.DataFrame(index=nifty.index)
+        nifty_features["nifty_return"] = nifty["close"].pct_change()
+        nifty_features["nifty_ema20"] = nifty["close"].ewm(span=20, adjust=False).mean()
+        
+        # RSI 14 for Nifty
+        delta = nifty["close"].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        nifty_features["nifty_rsi14"] = 100 - (100 / (1 + rs))
+        nifty_features["nifty_rsi14"] = nifty_features["nifty_rsi14"].fillna(100)
+        
+        # VIX feature
+        vix_features = pd.DataFrame(index=vix.index)
+        vix_features["india_vix_close"] = vix["close"]
+        
+        # Merge chronologically using exact trading dates, forward-fill missing (weekends/holidays), strictly avoiding future leakage
+        df = df.join(nifty_features, how="left").ffill()
+        df = df.join(vix_features, how="left").ffill()
+        
+        # Register metadata
+        self._register_metadata("nifty_return", "NIFTY50 Daily Return", "float64")
+        self._register_metadata("nifty_ema20", "NIFTY50 EMA (period=20)", "float64")
+        self._register_metadata("nifty_rsi14", "NIFTY50 RSI (period=14)", "float64", "[0, 100]")
+        self._register_metadata("india_vix_close", "India VIX Close", "float64")
+        
+        logger.debug(f"add_market_features took {time.time()-t0:.4f}s")
+        return df
+
 
     def add_ema(self, df: pd.DataFrame, period: int, col_name: str) -> pd.DataFrame:
         t0 = time.time()

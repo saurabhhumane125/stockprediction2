@@ -9,7 +9,6 @@ class InferenceConfig:
     DECISION_THRESHOLD: float = 0.5
     
     # Feature Input Dimensions
-    EXPECTED_FEATURES: int = 20  # Adjusted from 2 to 20 natively
     MAX_BATCH_SIZE: int = 1000
     
     def to_dict(self) -> Dict[str, Any]:
