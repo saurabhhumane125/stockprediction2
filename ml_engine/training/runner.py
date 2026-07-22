@@ -10,6 +10,7 @@ import logging
 import os
 import shutil
 import uuid
+import json
 from typing import Dict, Any, Optional, List
 
 from ml_engine.config.training_config import training_config
@@ -98,6 +99,19 @@ class ProductionTrainingRunner:
             logger.info("[Runner] EXPORT ONLY ACTIVATED. Simulating export.")
             results = self._mock_dry_run_results()
         else:
+            # Read tensor metadata to strictly enforce feature order during inference
+            tensor_meta_path = os.path.join(self.storage.base_path, self.dataset_version, "metadata.json")
+            feature_names = []
+            if os.path.exists(tensor_meta_path):
+                with open(tensor_meta_path, "r") as f:
+                    tensor_meta = json.load(f)
+                    feature_names = tensor_meta.get("features", {}).get("order", [])
+                    logger.info(f"[Runner] Loaded {len(feature_names)} explicit feature names from tensor metadata.")
+            else:
+                logger.warning("[Runner] Tensor metadata not found. Feature order guarantees cannot be enforced.")
+                
+            scaler_path = os.path.join(self.storage.base_path, self.dataset_version, "scaler.pkl")
+
             logger.info("[Runner] Commencing FULL Production Training Execution.")
             orchestrator = TrainingOrchestrator(
                 model_builder=model_builder,
@@ -106,6 +120,8 @@ class ProductionTrainingRunner:
                 data_path=self.dataset_version,
                 artifact_dir=self.artifact_dir,
                 version=f"{self.model_type}_{self.run_name}",
+                scaler_path=scaler_path if os.path.exists(scaler_path) else None,
+                feature_names=feature_names,
                 callbacks=[tracking_callback],
             )
             results = orchestrator.run(resume=self.resume)

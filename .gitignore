@@ -35,3 +35,32 @@ Thumbs.db
 # Coverage
 .coverage
 htmlcov/
+
+# ==========================================================
+# ML Generated Artifacts
+# ==========================================================
+
+# Generated tensors
+ml_engine/data/tensors/**/train.pt
+ml_engine/data/tensors/**/val.pt
+ml_engine/data/tensors/**/test.pt
+
+# Generated scaler artifacts
+ml_engine/data/tensors/**/scaler.pkl
+
+# Generated model artifacts
+artifacts/
+checkpoints/
+exports/
+reports/
+
+# Experiment database
+ml_engine/experiments/tracking.db
+
+# Registry runtime artifacts
+ml_engine/model_registry/candidate/
+ml_engine/model_registry/production/
+ml_engine/model_registry/staging/
+ml_engine/model_registry/archived/
+ml_engine/model_registry/rolled_back/
+ml_engine/model_registry/deprecated/

@@ -10,6 +10,9 @@ import logging
 import pandas as pd
 import numpy as np
 from typing import List
+import joblib
+import hashlib
+from sklearn.preprocessing import StandardScaler
 
 from ml_engine.data.tensors.utils import add_target_column
 from ml_engine.data.tensors.window_generator import WindowGenerator
@@ -61,10 +64,12 @@ class TensorBuilder:
         X_test_list, y_test_list = [], []
         
         feature_cols = None
+        processed_data = []
         
+        # --- PASS 1: Split Chronologically and Collect Training Data for Scaler Fitting ---
         for p_file in parquet_files:
             ticker = os.path.basename(os.path.dirname(p_file)).replace("ticker=", "")
-            logger.info(f"[TensorBuilder] Processing ticker: {ticker}")
+            logger.info(f"[TensorBuilder] Pass 1 (Scaler Fitting): {ticker}")
             
             df = pd.read_parquet(p_file)
             
@@ -76,20 +81,40 @@ class TensorBuilder:
                 exclude = {"ticker", "target"}
                 feature_cols = [c for c in df.columns if c not in exclude]
                 
-            # 2. Split (Must split before windowing to prevent data leakage!)
-            # Wait, if we split before windowing, we lose sequence_length-1 days at the start of val and test.
-            # Production robust way: split AFTER windowing OR window train, val, test independently.
-            # To avoid data leakage across the exact split boundary, it's safer to window the whole df, 
-            # then split chronologically on the window target dates.
-            
-            # Since the window generator assigns the target of the LAST element of the window,
-            # we can window the whole df, and preserve dates to split accurately.
-            
-            # We'll adapt: WindowGenerator generates arrays. We need to split arrays chronologically.
-            # A simple trick: split the DataFrame first, but include `seq_len - 1` historical rows 
-            # for val and test from the preceding set. 
-            
             train_df, val_df, test_df = ChronologicalSplitter.split_by_date(df)
+            processed_data.append((ticker, df, train_df, val_df, test_df))
+            
+        # Fit Global StandardScaler on all train data
+        logger.info("[TensorBuilder] Fitting Global StandardScaler on combined training data...")
+        all_train_features = pd.concat([item[2][feature_cols] for item in processed_data])
+        scaler = StandardScaler()
+        scaler.fit(all_train_features)
+        
+        # Save Scaler
+        os.makedirs(output_dir, exist_ok=True)
+        scaler_path = os.path.join(output_dir, "scaler.pkl")
+        joblib.dump(scaler, scaler_path)
+        logger.info(f"[TensorBuilder] Scaler saved to {scaler_path}")
+        
+        # Calculate Scaler Checksum for Metadata
+        with open(scaler_path, "rb") as f:
+            scaler_checksum = hashlib.sha256(f.read()).hexdigest()
+            
+        scaler_info = {
+            "scaler_type": "StandardScaler",
+            "scaler_checksum": scaler_checksum
+        }
+        
+        # --- PASS 2: Apply Scaler and Generate Sequences ---
+        for ticker, df, train_df, val_df, test_df in processed_data:
+            logger.info(f"[TensorBuilder] Pass 2 (Sequence Generation): {ticker}")
+            
+            # Apply Scaling
+            df_scaled = df.copy()
+            df_scaled[feature_cols] = scaler.transform(df[feature_cols])
+            
+            # Re-split chronologically from the scaled dataframe
+            train_df, val_df, test_df = ChronologicalSplitter.split_by_date(df_scaled)
             
             # Prepend history to val and test for windowing
             seq_len = training_config.SEQUENCE_LENGTH
@@ -97,8 +122,8 @@ class TensorBuilder:
                 history = train_df.iloc[-(seq_len - 1):]
                 val_df = pd.concat([history, val_df])
                 
-            if len(df.loc[:training_config.VAL_END_DATE]) >= seq_len - 1 and len(test_df) > 0:
-                history = df.loc[:training_config.VAL_END_DATE].iloc[-(seq_len - 1):]
+            if len(df_scaled.loc[:training_config.VAL_END_DATE]) >= seq_len - 1 and len(test_df) > 0:
+                history = df_scaled.loc[:training_config.VAL_END_DATE].iloc[-(seq_len - 1):]
                 test_df = pd.concat([history, test_df])
             
             # 3. Window
@@ -143,7 +168,8 @@ class TensorBuilder:
             X_train.shape,
             X_val.shape,
             X_test.shape,
-            target_dist
+            target_dist,
+            scaler_info
         )
         
         # 6. Serialize

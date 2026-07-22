@@ -1,0 +1,28 @@
+{
+    "count": 23,
+    "order": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "dividends",
+        "stock_splits",
+        "daily_return",
+        "ema_short",
+        "ema_long",
+        "rsi",
+        "macd_line",
+        "macd_signal",
+        "macd_histogram",
+        "bb_upper",
+        "bb_lower",
+        "bb_width",
+        "atr",
+        "adx",
+        "roc",
+        "momentum",
+        "volatility",
+        "volume_change"
+    ]
+}

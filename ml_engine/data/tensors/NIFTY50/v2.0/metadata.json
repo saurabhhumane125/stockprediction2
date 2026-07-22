@@ -1,0 +1,50 @@
+{
+    "dataset_version": "NIFTY50/v2.0",
+    "generation_timestamp": "2026-07-22T20:06:46.838901Z",
+    "sequence_length": 48,
+    "forecast_horizon": 1,
+    "features": {
+        "count": 23,
+        "order": [
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "dividends",
+            "stock_splits",
+            "daily_return",
+            "ema_short",
+            "ema_long",
+            "rsi",
+            "macd_line",
+            "macd_signal",
+            "macd_histogram",
+            "bb_upper",
+            "bb_lower",
+            "bb_width",
+            "atr",
+            "adx",
+            "roc",
+            "momentum",
+            "volatility",
+            "volume_change"
+        ]
+    },
+    "dimensions": {
+        "train_samples": 43310,
+        "val_samples": 18130,
+        "test_samples": 36541
+    },
+    "statistics": {
+        "target_distribution_train": {
+            "0": 21193,
+            "1": 22117
+        }
+    },
+    "configuration_hash": "c6de5914ef9063063af83eba22474888d551d2925f099e435ee2216a628925ca",
+    "preprocessing": {
+        "scaler_type": "StandardScaler",
+        "scaler_checksum": "c2ec3ac5fff50b0b9912a2d54b48c38eb890cae294af43e3f84e3ceae1d57fb2"
+    }
+}

@@ -26,7 +26,8 @@ class MetadataGenerator:
         train_shape: tuple,
         val_shape: tuple,
         test_shape: tuple,
-        y_train_dist: dict
+        y_train_dist: dict,
+        scaler_info: dict = None
     ) -> Dict[str, Any]:
         """
         Creates the metadata dictionary tracking sizes, shapes, and features.
@@ -52,4 +53,8 @@ class MetadataGenerator:
             },
             "configuration_hash": ManifestManager._compute_config_hash(),
         }
+        
+        if scaler_info:
+            metadata["preprocessing"] = scaler_info
+            
         return metadata
