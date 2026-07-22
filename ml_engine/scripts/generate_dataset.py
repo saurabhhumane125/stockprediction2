@@ -24,6 +24,7 @@ from ml_engine.data.preprocess.cleaner import ProductionCleaner
 from ml_engine.data.features.generator import FeatureGenerator
 from ml_engine.data.storage.parquet_partitioner import PartitionedParquetStorage
 from ml_engine.data.reports.data_quality import DataQualityReportBuilder
+from ml_engine.config.settings import DATASET_STORAGE_ROOT
 
 
 # Configure structured logging for the script
@@ -68,7 +69,7 @@ def main():
     parser.add_argument("--end-date", type=str, required=True, help="YYYY-MM-DD")
     parser.add_argument("--workers", type=int, default=5, help="Parallel download workers")
     parser.add_argument("--force-full-refresh", action="store_true", help="Ignore existing data and download all")
-    parser.add_argument("--output-directory", type=str, default="ml_engine/data/storage/datasets", help="Root storage directory")
+    parser.add_argument("--output-directory", type=str, default=DATASET_STORAGE_ROOT, help="Root storage directory")
     parser.add_argument("--dry-run", action="store_true", help="Do not write to disk")
     
     args = parser.parse_args()

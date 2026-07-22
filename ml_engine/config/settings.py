@@ -1,6 +1,7 @@
 import os
 from pydantic import Field
 from pydantic_settings import BaseSettings
+DATASET_STORAGE_ROOT = "ml_engine/data/storage/datasets"
 
 
 class Settings(BaseSettings):

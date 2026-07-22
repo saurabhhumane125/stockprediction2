@@ -21,6 +21,7 @@ from ml_engine.data.tensors.validator import TensorValidator
 from ml_engine.data.tensors.metadata import MetadataGenerator
 from ml_engine.data.tensors.serializer import TensorSerializer
 from ml_engine.config.training_config import training_config
+from ml_engine.config.settings import DATASET_STORAGE_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ class TensorBuilder:
         """
         logger.info(f"=== Tensor Builder Started for {dataset_version} ===")
         
-        input_base = os.path.join("ml_engine/data/storage/datasets", dataset_version)
+        input_base = os.path.join(DATASET_STORAGE_ROOT, dataset_version)
         output_dir = os.path.join(output_base, dataset_version)
         
         if not os.path.exists(input_base):
