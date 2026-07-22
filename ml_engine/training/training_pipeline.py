@@ -318,18 +318,50 @@ class TrainingOrchestrator:
 
         # 10. Evaluate on test set
         eval_metrics = self._eval_epoch(model, test_loader, criterion, device, prefix="test")
-        all_preds, all_probs, all_true = self._collect_predictions(model, test_loader, device)
-        clf_metrics = _compute_metrics(all_true, all_preds, all_probs)
+        test_preds, test_probs, test_true, test_logits = self._collect_predictions(model, test_loader, device)
+        
+        # Slice class-1 probability for AUC if binary
+        test_prob_auc = test_probs[:, 1] if test_probs.shape[1] == 2 else test_probs
+        clf_metrics = _compute_metrics(test_true, test_preds, test_prob_auc)
         eval_metrics.update(clf_metrics)
         logger.info(f"[TrainingOrchestrator] Test evaluation: {eval_metrics}")
         
-        # 10.5 Fit Calibration on validation set
-        val_preds, val_probs, val_true = self._collect_predictions(model, val_loader, device)
+        # 10.5 Fit Calibration and Generate Evaluation Plots on validation set
+        val_preds, val_probs, val_true, val_logits = self._collect_predictions(model, val_loader, device)
+        
         from ml_engine.calibration.calibrator import CalibrationManager
         calibrator = CalibrationManager()
-        calibrator.fit(val_probs, val_true)
+        calibrator.fit(val_probs[:, 1] if val_probs.shape[1] == 2 else val_probs, val_true)
         calibrator_path = os.path.join(self.artifact_dir, "calibrator.pkl")
         calibrator.save(calibrator_path)
+
+        # Generate diagnostic plots and optimize threshold
+        try:
+            from ml_engine.training.evaluation_plots import find_optimal_threshold, generate_evaluation_plots
+            
+            # Save raw arrays
+            np.save(os.path.join(self.artifact_dir, "val_logits.npy"), val_logits)
+            np.save(os.path.join(self.artifact_dir, "val_probs.npy"), val_probs)
+            np.save(os.path.join(self.artifact_dir, "test_logits.npy"), test_logits)
+            np.save(os.path.join(self.artifact_dir, "test_probs.npy"), test_probs)
+            
+            # Optimal threshold
+            optimal_thresh = find_optimal_threshold(val_true, val_probs[:, 1] if val_probs.shape[1] == 2 else val_probs)
+            eval_metrics["optimal_val_f1_threshold"] = optimal_thresh
+            
+            # Generate plots
+            val_plot_paths = generate_evaluation_plots(
+                val_true, val_probs[:, 1] if val_probs.shape[1] == 2 else val_probs, val_logits, self.artifact_dir, prefix="val"
+            )
+            test_plot_paths = generate_evaluation_plots(
+                test_true, test_probs[:, 1] if test_probs.shape[1] == 2 else test_probs, test_logits, self.artifact_dir, prefix="test"
+            )
+            
+            # Merge plot paths into metrics for the report generator to use
+            eval_metrics["plot_paths"] = {**val_plot_paths, **test_plot_paths}
+            
+        except ImportError as e:
+            logger.warning(f"[TrainingOrchestrator] Could not generate plots: {e}")
         
         total_time = time.time() - wall_start
 
@@ -473,11 +505,11 @@ class TrainingOrchestrator:
 
     def _collect_predictions(
         self, model, loader, device
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         import torch
         import torch.nn.functional as F
 
-        all_preds, all_probs, all_true = [], [], []
+        all_preds, all_probs, all_true, all_logits = [], [], [], []
         model.eval()
         with torch.no_grad():
             for X_batch, y_batch in loader:
@@ -485,6 +517,7 @@ class TrainingOrchestrator:
                 logits = model(X_batch)
                 probs = F.softmax(logits, dim=1).cpu().numpy()
                 preds = logits.argmax(dim=1).cpu().numpy()
+                all_logits.append(logits.cpu().numpy())
                 all_preds.append(preds)
                 all_probs.append(probs)
                 all_true.append(y_batch.numpy())
@@ -492,10 +525,8 @@ class TrainingOrchestrator:
         all_preds = np.concatenate(all_preds)
         all_probs = np.concatenate(all_probs)
         all_true = np.concatenate(all_true)
-        # For AUC: if binary, use probability of class-1
-        if all_probs.shape[1] == 2:
-            all_probs = all_probs[:, 1]
-        return all_preds, all_probs, all_true
+        all_logits = np.concatenate(all_logits)
+        return all_preds, all_probs, all_true, all_logits
 
     def _build_dataset_info(
         self, train_X: np.ndarray, val_X: np.ndarray, test_X: np.ndarray

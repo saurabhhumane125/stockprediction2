@@ -101,6 +101,11 @@ class ReportGenerator:
             Dict with keys ``json_path`` and ``markdown_path``.
         """
         environment = self._collect_environment()
+        # Pop plot paths from eval metrics if present
+        plot_paths = {}
+        if "plot_paths" in eval_metrics:
+            plot_paths = eval_metrics.pop("plot_paths")
+
         report = {
             "version": version,
             "generated_at": datetime.now(tz=timezone.utc).isoformat(),
@@ -115,6 +120,7 @@ class ReportGenerator:
                 k: round(float(v), 6) if isinstance(v, (int, float)) or (isinstance(v, str) and v.replace('.','',1).isdigit()) else v 
                 for k, v in eval_metrics.items()
             },
+            "plot_paths": plot_paths,
         }
 
         json_path = os.path.join(self.output_dir, "training_report.json")
@@ -179,9 +185,23 @@ class ReportGenerator:
         lines.append("```\n")
 
         h(2, "Evaluation Metrics (Out-of-Sample)")
+        
+        # Highlight the optimal F1 threshold if available
+        if "optimal_val_f1_threshold" in report["evaluation_metrics"]:
+            thresh = report["evaluation_metrics"]["optimal_val_f1_threshold"]
+            lines.append(f"> [!TIP]\n> **Optimal F1 Threshold (Validation)**: `{thresh:.4f}`\n")
+
         for k, v in report["evaluation_metrics"].items():
             kv(k, v)
         lines.append("")
+        
+        # Embed plots if available
+        if report.get("plot_paths"):
+            h(2, "Evaluation Plots")
+            for plot_key, plot_filename in report["plot_paths"].items():
+                lines.append(f"### {plot_key.replace('_', ' ').title()}")
+                lines.append(f"![{plot_key}](./{plot_filename})\n")
+            lines.append("")
 
         h(2, "Training Curve (last 10 epochs)")
         history = report["training_history"]
