@@ -16,7 +16,7 @@ node_modules/
 datasets/
 
 # Models
-models/
+/models/
 
 # VS Code
 .vscode/
