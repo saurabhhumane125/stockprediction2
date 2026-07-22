@@ -64,3 +64,6 @@ ml_engine/model_registry/staging/
 ml_engine/model_registry/archived/
 ml_engine/model_registry/rolled_back/
 ml_engine/model_registry/deprecated/
+
+# Runtime databases
+ml_engine/experiments/*.db
