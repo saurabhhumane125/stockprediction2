@@ -2,9 +2,6 @@ import logging
 import time
 import pandas as pd
 import yfinance as yf
-from requests import Session
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 from typing import List, Dict, Optional
 
 from ml_engine.interfaces.base_downloader import BaseDownloader
@@ -37,31 +34,23 @@ class YFinanceDownloader(BaseDownloader):
         self.timeout = timeout
         self.max_retries = max_retries
         self.backoff_factor = backoff_factor
-        
-        # Configure connection reuse and exponential backoff
-        self.session = Session()
-        self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        })
-        retry_strategy = Retry(
-            total=self.max_retries,
-            backoff_factor=self.backoff_factor,
-            status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["GET"]
-        )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        self.session.mount("https://", adapter)
-        self.session.mount("http://", adapter)
 
     def health_check(self) -> bool:
         """
         Verify if Yahoo Finance is accessible by fetching a lightweight ticker.
         """
         try:
-            test_ticker = yf.Ticker("RELIANCE.NS", session=self.session)
-            hist = test_ticker.history(period="1d", timeout=self.timeout)
-            if not hist.empty:
-                return True
+            for attempt in range(self.max_retries):
+                try:
+                    test_ticker = yf.Ticker("RELIANCE.NS")
+                    hist = test_ticker.history(period="1d", timeout=self.timeout)
+                    if not hist.empty:
+                        return True
+                    break
+                except Exception as e:
+                    if attempt == self.max_retries - 1:
+                        raise e
+                    time.sleep(self.backoff_factor * (2 ** attempt))
             return False
         except Exception as e:
             logger.error(f"Health check failed for YFinanceDownloader: {e}")
@@ -113,18 +102,27 @@ class YFinanceDownloader(BaseDownloader):
         logger.info(f"Downloading {ticker} from {start_date} to {end_date} at {interval} interval.")
         
         try:
-            yf_ticker = yf.Ticker(ticker, session=self.session)
-            
-            # yfinance history handles auto_adjust=True by default for OHLC
-            # actions=True brings in dividends and splits
-            df = yf_ticker.history(
-                start=start_date,
-                end=end_date,
-                interval=interval,
-                actions=True,
-                auto_adjust=True,
-                timeout=self.timeout
-            )
+            for attempt in range(self.max_retries):
+                try:
+                    yf_ticker = yf.Ticker(ticker)
+                    
+                    # yfinance history handles auto_adjust=True by default for OHLC
+                    # actions=True brings in dividends and splits
+                    df = yf_ticker.history(
+                        start=start_date,
+                        end=end_date,
+                        interval=interval,
+                        actions=True,
+                        auto_adjust=True,
+                        timeout=self.timeout
+                    )
+                    break
+                except Exception as e:
+                    if attempt == self.max_retries - 1:
+                        logger.error(f"Failed to download {ticker} after {self.max_retries} attempts: {e}")
+                        raise RuntimeError(f"YFinance download failed for {ticker}") from e
+                    logger.debug(f"Attempt {attempt + 1} failed for {ticker}: {e}. Retrying...")
+                    time.sleep(self.backoff_factor * (2 ** attempt))
             
             if df.empty:
                 logger.warning(f"Empty dataset returned for {ticker}.")

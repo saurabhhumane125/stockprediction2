@@ -14,13 +14,13 @@ logger = logging.getLogger(__name__)
 class DependencyManager:
     """Manages Python packages for Colab."""
 
-    PINNED_DEPS = [
-        "torch>=2.0.0",
-        "numpy>=1.24.0",
-        "pandas>=2.0.0",
-        "scikit-learn>=1.2.0",
-        "optuna>=3.0.0"
-    ]
+    @staticmethod
+    def get_canonical_deps() -> list[str]:
+        import os
+        if os.path.exists("requirements-training.txt"):
+            with open("requirements-training.txt", "r") as f:
+                return [line.strip() for line in f if line.strip() and not line.startswith("#")]
+        raise FileNotFoundError("requirements-training.txt not found. Cannot determine dependencies.")
 
     @staticmethod
     def _is_installed_and_compatible(pkg: str) -> bool:
@@ -41,12 +41,8 @@ class DependencyManager:
         """Checks for missing dependencies and installs them."""
         logger.info("[DependencyManager] Checking dependencies...")
         
-        # Load pinned deps from lockfile if available
-        import os
-        deps = DependencyManager.PINNED_DEPS
-        if os.path.exists("requirements-training.txt"):
-            with open("requirements-training.txt", "r") as f:
-                deps = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+        # Load pinned deps from lockfile
+        deps = DependencyManager.get_canonical_deps()
         
         missing = [pkg for pkg in deps if not DependencyManager._is_installed_and_compatible(pkg)]
         
