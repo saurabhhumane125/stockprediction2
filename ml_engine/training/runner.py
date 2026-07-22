@@ -39,7 +39,10 @@ class ProductionTrainingRunner:
         model_type: str = "GRU",
         resume: bool = False,
         dry_run: bool = False,
-        export_only: bool = False
+        export_only: bool = False,
+        epochs: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        device: Optional[str] = None
     ):
         self.dataset_version = dataset_version
         self.experiment_name = experiment_name
@@ -49,6 +52,14 @@ class ProductionTrainingRunner:
         self.dry_run = dry_run
         self.export_only = export_only
         self.cfg = training_config
+        
+        # Override config safely without modifying source
+        if epochs is not None:
+            self.cfg.EPOCHS = epochs
+        if batch_size is not None:
+            self.cfg.BATCH_SIZE = batch_size
+        if device is not None:
+            self.cfg.DEVICE = device
         
         self.registry = RegistryManager(registry_base_path="ml_engine/model_registry")
         self.storage = NumpyStorage(base_path="ml_engine/data/tensors")
@@ -87,8 +98,7 @@ class ProductionTrainingRunner:
             logger.info("[Runner] EXPORT ONLY ACTIVATED. Simulating export.")
             results = self._mock_dry_run_results()
         else:
-            logger.warning("[Runner] ACTUAL TRAINING IS NOT IMPLEMENTED LOCALLY IN THIS MILESTONE. Use --dry-run.")
-            # In a real environment, we'd initialize the orchestrator and run it
+            logger.info("[Runner] Commencing FULL Production Training Execution.")
             orchestrator = TrainingOrchestrator(
                 model_builder=model_builder,
                 tensor_storage=self.storage,
@@ -96,9 +106,9 @@ class ProductionTrainingRunner:
                 data_path=self.dataset_version,
                 artifact_dir=self.artifact_dir,
                 version=f"{self.model_type}_{self.run_name}",
+                callbacks=[tracking_callback],
             )
-            # results = orchestrator.run(resume=self.resume)
-            results = self._mock_dry_run_results() # Fallback
+            results = orchestrator.run(resume=self.resume)
 
         # 5. End Tracking
         tracking_callback.on_train_end(
@@ -107,7 +117,8 @@ class ProductionTrainingRunner:
         )
         
         # 6. Candidate Artifact Export & Registry
-        self._export_and_register(results)
+        if self.dry_run or self.export_only:
+            self._export_and_register(results)
         
         return results
 

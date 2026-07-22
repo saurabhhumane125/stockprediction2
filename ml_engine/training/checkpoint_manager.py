@@ -73,7 +73,7 @@ class CheckpointManager:
     def best_value(self) -> float:
         return self._best_value
 
-    def step(self, epoch: int, metrics: Dict[str, float], model: Any, optimizer: Any, scheduler: Any) -> bool:
+    def step(self, epoch: int, metrics: Dict[str, Any], model: Any, optimizer: Any, scheduler: Any) -> bool:
         """
         Called at the end of every epoch. Saves the latest checkpoint and,
         if the monitored metric improved, also saves the best checkpoint.
@@ -185,7 +185,7 @@ class CheckpointManager:
 
     # ── Internal Helpers ──────────────────────────────────────────────────────
 
-    def _save_best(self, epoch: int, metrics: Dict[str, float], model: Any) -> None:
+    def _save_best(self, epoch: int, metrics: Dict[str, Any], model: Any) -> None:
         import torch
         best_path = os.path.join(self.checkpoint_dir, self.BEST_FILE)
         torch.save(
@@ -201,7 +201,7 @@ class CheckpointManager:
     def _save_latest(
         self,
         epoch: int,
-        metrics: Dict[str, float],
+        metrics: Dict[str, Any],
         model: Any,
         optimizer: Any,
         scheduler: Any,
@@ -222,7 +222,18 @@ class CheckpointManager:
             latest_path,
         )
 
-    def _save_meta(self, epoch: int, metrics: Dict[str, float]) -> None:
+    def _save_meta(self, epoch: int, metrics: Dict[str, Any]) -> None:
+        def _safe_float_convert(v):
+            if isinstance(v, (int, float)):
+                return float(v)
+            try:
+                import numpy as np
+                if isinstance(v, (np.number, np.bool_)):
+                    return float(v)
+            except ImportError:
+                pass
+            return v
+            
         meta = {
             "last_epoch": epoch,
             "best_epoch": self._best_epoch,
@@ -231,7 +242,7 @@ class CheckpointManager:
             "mode": self.mode,
             "epochs_without_improvement": self._epochs_without_improvement,
             "stopped_early": self._stopped_early,
-            "metrics": {k: float(v) for k, v in metrics.items()},
+            "metrics": {k: _safe_float_convert(v) for k, v in metrics.items()},
         }
         meta_path = os.path.join(self.checkpoint_dir, self.META_FILE)
         with open(meta_path, "w") as f:

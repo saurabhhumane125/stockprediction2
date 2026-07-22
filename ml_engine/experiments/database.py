@@ -132,10 +132,35 @@ class ExperimentDatabase:
             )
             conn.commit()
 
+    def _safe_serialize(self, v: Any) -> str:
+        try:
+            import numpy as np
+            if isinstance(v, np.ndarray):
+                return json.dumps(v.tolist())
+        except ImportError:
+            pass
+
+        try:
+            import torch
+            if isinstance(v, torch.Tensor):
+                if v.numel() == 1:
+                    return str(v.item())
+                return json.dumps(v.detach().cpu().numpy().tolist())
+        except ImportError:
+            pass
+
+        if isinstance(v, (dict, list, tuple)):
+            try:
+                return json.dumps(v)
+            except TypeError:
+                pass
+
+        return str(v)
+
     def log_metadata(self, run_id: str, metadata: Dict[str, Any]):
         with self._get_conn() as conn:
             for k, v in metadata.items():
-                val_str = str(v) if not isinstance(v, (dict, list)) else json.dumps(v)
+                val_str = self._safe_serialize(v)
                 conn.execute(
                     "INSERT OR REPLACE INTO run_metadata (run_id, key, value) VALUES (?, ?, ?)",
                     (run_id, k, val_str)
@@ -145,20 +170,47 @@ class ExperimentDatabase:
     def log_parameters(self, run_id: str, parameters: Dict[str, Any]):
         with self._get_conn() as conn:
             for k, v in parameters.items():
-                val_str = str(v) if not isinstance(v, (dict, list)) else json.dumps(v)
+                val_str = self._safe_serialize(v)
                 conn.execute(
                     "INSERT OR REPLACE INTO run_parameters (run_id, key, value) VALUES (?, ?, ?)",
                     (run_id, k, val_str)
                 )
             conn.commit()
 
-    def log_metrics(self, run_id: str, metrics: Dict[str, float]):
+    def log_metrics(self, run_id: str, metrics: Dict[str, Any]):
+        scalar_types = (int, float, bool)
+        try:
+            import numpy as np
+            scalar_types = scalar_types + (np.number, np.bool_)
+        except ImportError:
+            pass
+
+        scalars = {}
+        complex_metrics = {}
+
+        for k, v in metrics.items():
+            if isinstance(v, scalar_types):
+                scalars[k] = v
+            else:
+                try:
+                    import torch
+                    if isinstance(v, torch.Tensor) and v.numel() == 1:
+                        scalars[k] = v.item()
+                        continue
+                except ImportError:
+                    pass
+                complex_metrics[k] = v
+
         with self._get_conn() as conn:
-            for k, v in metrics.items():
+            for k, v in scalars.items():
                 conn.execute(
                     "INSERT OR REPLACE INTO run_metrics (run_id, key, value) VALUES (?, ?, ?)",
                     (run_id, k, float(v))
                 )
+            conn.commit()
+
+        if complex_metrics:
+            self.log_metadata(run_id, complex_metrics)
             conn.commit()
 
     def log_artifacts(self, run_id: str, artifacts: Dict[str, str]):
@@ -185,9 +237,16 @@ class ExperimentDatabase:
             artifact_rows = conn.execute("SELECT key, path FROM run_artifacts WHERE run_id = ?", (run_id,)).fetchall()
             
             run = RunRecord(**run_dict)
-            run.metadata = {r["key"]: r["value"] for r in meta_rows}
-            run.parameters = {r["key"]: r["value"] for r in param_rows}
-            run.metrics = {r["key"]: r["value"] for r in metric_rows}
+            
+            def _safe_deserialize(val: str) -> Any:
+                try:
+                    return json.loads(val)
+                except (ValueError, TypeError):
+                    return val
+
+            run.metadata = {r["key"]: _safe_deserialize(r["value"]) for r in meta_rows}
+            run.parameters = {r["key"]: _safe_deserialize(r["value"]) for r in param_rows}
+            run.metrics = {r["key"]: float(r["value"]) if r["value"] is not None else 0.0 for r in metric_rows}
             run.artifacts = {r["key"]: r["path"] for r in artifact_rows}
             
             return run

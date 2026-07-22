@@ -23,6 +23,20 @@ class UniverseManager:
         Retrieve a list of tickers for a given universe name.
         """
         name_upper = name.upper()
+        
+        # Dynamic fetch for NIFTY50 to avoid outdated hardcoded lists
+        if name_upper == "NIFTY50":
+            try:
+                import pandas as pd
+                url = "https://archives.nseindia.com/content/indices/ind_nifty50list.csv"
+                df = pd.read_csv(url)
+                tickers = df["Symbol"].apply(lambda x: x + ".NS").tolist()
+                tickers = sorted(list(set(tickers)))
+                logger.info(f"[UniverseManager] Dynamically loaded {len(tickers)} NIFTY 50 tickers from NSE.")
+                return tickers
+            except Exception as e:
+                logger.warning(f"[UniverseManager] Failed to dynamically fetch NIFTY 50: {e}. Falling back to config.")
+        
         if name_upper not in UniverseConfig.UNIVERSES:
             raise ValueError(f"Universe '{name}' not found. Available: {list(UniverseConfig.UNIVERSES.keys())}")
             

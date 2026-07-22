@@ -69,7 +69,7 @@ class ExperimentTracker:
         self.run.parameters.update(params)
         self.db.log_parameters(self.run.run_id, params)
 
-    def log_metrics(self, metrics: Dict[str, float]):
+    def log_metrics(self, metrics: Dict[str, Any]):
         self.run.metrics.update(metrics)
         self.db.log_metrics(self.run.run_id, metrics)
 

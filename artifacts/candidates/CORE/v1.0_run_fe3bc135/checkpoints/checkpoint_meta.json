@@ -1,0 +1,16 @@
+{
+    "last_epoch": 24,
+    "best_epoch": 9,
+    "best_value": 0.6928424785588239,
+    "monitor": "val_loss",
+    "mode": "min",
+    "epochs_without_improvement": 15,
+    "stopped_early": true,
+    "metrics": {
+        "epoch": 24.0,
+        "train_loss": 0.6940085593523554,
+        "train_accuracy": 0.5291079812206573,
+        "val_loss": 0.6944648156939326,
+        "val_accuracy": 0.514054054054054
+    }
+}

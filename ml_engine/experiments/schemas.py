@@ -29,7 +29,7 @@ class RunRecord:
     
     metadata: Dict[str, Any] = field(default_factory=dict)
     parameters: Dict[str, Any] = field(default_factory=dict)
-    metrics: Dict[str, float] = field(default_factory=dict)
+    metrics: Dict[str, Any] = field(default_factory=dict)
     artifacts: Dict[str, str] = field(default_factory=dict)
 
     @classmethod

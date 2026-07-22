@@ -22,10 +22,10 @@ class TrainingCallback:
     def on_epoch_begin(self, epoch: int):
         pass
 
-    def on_epoch_end(self, epoch: int, metrics: Dict[str, float]):
+    def on_epoch_end(self, epoch: int, metrics: Dict[str, Any]):
         pass
 
-    def on_train_end(self, metrics: Dict[str, float], model_path: Optional[str] = None):
+    def on_train_end(self, metrics: Dict[str, Any], model_path: Optional[str] = None):
         pass
 
     def on_early_stopping(self, epoch: int, best_epoch: int, best_metric: float):
@@ -47,7 +47,7 @@ class ExperimentTrackingCallback(TrainingCallback):
     def on_epoch_begin(self, epoch: int):
         self.epoch_start_time = time.time()
 
-    def on_epoch_end(self, epoch: int, metrics: Dict[str, float]):
+    def on_epoch_end(self, epoch: int, metrics: Dict[str, Any]):
         duration = time.time() - self.epoch_start_time
         # In a real deep tracking system we might log metrics per epoch.
         # For our tracker, we'll log the latest metrics. 
@@ -55,7 +55,7 @@ class ExperimentTrackingCallback(TrainingCallback):
         metrics_with_duration = {**metrics, "epoch_duration_s": duration}
         self.tracker.log_metrics(metrics_with_duration)
 
-    def on_train_end(self, metrics: Dict[str, float], model_path: Optional[str] = None):
+    def on_train_end(self, metrics: Dict[str, Any], model_path: Optional[str] = None):
         logger.info("[ExperimentTrackingCallback] Training ended. Logging final metrics and artifacts.")
         self.tracker.log_metrics(metrics)
         if model_path:

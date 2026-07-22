@@ -47,7 +47,8 @@ class TrainingConfig:
 
     # ── Precision & Hardware ─────────────────────────────────────────────────────
     MIXED_PRECISION: bool = False              # enable torch.cuda.amp if True
-    DEVICE: str = "cpu"                        # "cpu" | "cuda" | "mps"
+    DEVICE: str = "auto"                       # "auto" | "cpu" | "cuda" | "mps"
+    CUDNN_BENCHMARK: bool = True               # optimise cudnn for fixed input sizes
 
     # ── Reproducibility ──────────────────────────────────────────────────────────
     SEED: int = 42

@@ -41,7 +41,10 @@ def main():
         model_type=args.model,
         resume=args.resume,
         dry_run=args.dry_run,
-        export_only=args.export_only
+        export_only=args.export_only,
+        epochs=args.epochs,
+        batch_size=getattr(args, "batch_size", 64),
+        device=args.device
     )
     
     try:

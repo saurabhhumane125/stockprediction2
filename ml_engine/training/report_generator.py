@@ -74,8 +74,8 @@ class ReportGenerator:
         self,
         config: Dict[str, Any],
         dataset_info: Dict[str, Any],
-        history: List[Dict[str, float]],
-        eval_metrics: Dict[str, float],
+        history: List[Dict[str, Any]],
+        eval_metrics: Dict[str, Any],
         feature_names: List[str],
         version: str = "unknown",
         execution_time_seconds: float = 0.0,
@@ -111,7 +111,10 @@ class ReportGenerator:
             "dataset": dataset_info,
             "feature_names": feature_names,
             "training_history": history,
-            "evaluation_metrics": {k: round(float(v), 6) for k, v in eval_metrics.items()},
+            "evaluation_metrics": {
+                k: round(float(v), 6) if isinstance(v, (int, float)) or (isinstance(v, str) and v.replace('.','',1).isdigit()) else v 
+                for k, v in eval_metrics.items()
+            },
         }
 
         json_path = os.path.join(self.output_dir, "training_report.json")
@@ -190,7 +193,11 @@ class ReportGenerator:
             lines.append(header)
             lines.append(sep)
             for row in tail:
-                lines.append("| " + " | ".join(str(round(row.get(c, 0), 6)) for c in cols) + " |")
+                def _fmt(val):
+                    if isinstance(val, (int, float)):
+                        return str(round(val, 6))
+                    return str(val)
+                lines.append("| " + " | ".join(_fmt(row.get(c, 0)) for c in cols) + " |")
         lines.append("")
 
         return "\n".join(lines)

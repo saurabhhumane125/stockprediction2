@@ -38,7 +38,7 @@ class TensorBuilder:
         """
         logger.info(f"=== Tensor Builder Started for {dataset_version} ===")
         
-        input_base = os.path.join("ml_engine/data/storage/production", dataset_version)
+        input_base = os.path.join("ml_engine/data/storage/datasets", dataset_version)
         output_dir = os.path.join(output_base, dataset_version)
         
         if not os.path.exists(input_base):

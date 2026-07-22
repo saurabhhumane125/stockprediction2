@@ -24,6 +24,10 @@ def main():
     parser.add_argument("--verify-env", action="store_true", help="Verify current environment against execution_manifest.json")
     parser.add_argument("--generate-manifest", type=str, help="Generate execution_manifest.json (pass dataset version)")
     
+    parser.add_argument("--extract", action="store_true", help="Extract execution package from Drive")
+    parser.add_argument("--check-deps", action="store_true", help="Check and install missing Colab dependencies")
+    parser.add_argument("--sync-exports", action="store_true", help="Sync artifacts back to Drive")
+    
     args = parser.parse_args()
     
     logging.basicConfig(
@@ -34,6 +38,9 @@ def main():
     
     try:
         from ml_engine.colab.manifest_manager import ManifestManager
+        from ml_engine.colab.orchestrator import PackageOrchestrator
+        from ml_engine.colab.dependency_manager import DependencyManager
+        from ml_engine.colab.artifact_sync import ArtifactSynchronizer
         
         if args.lock_env:
             logger.info("Environment locking is handled statically via requirements-training.txt at the repository root.")
@@ -45,8 +52,19 @@ def main():
             # We need the dataset version to verify, assume it was provided in generate-manifest or validate
             dv = args.validate or args.generate_manifest or "UNKNOWN"
             ManifestManager.verify(dv)
+            
         if args.mount:
+            from ml_engine.colab.drive_manager import DriveManager
             DriveManager.mount()
+            
+        if args.extract:
+            PackageOrchestrator.extract_safely()
+            
+        if args.check_deps:
+            DependencyManager.check_and_install()
+            
+        if args.sync_exports:
+            ArtifactSynchronizer.sync_to_drive()
             
         if args.validate:
             ColabBootstrap.setup(args.validate)
@@ -57,8 +75,8 @@ def main():
             else:
                 logger.info("[ColabCLI] Dry-run: Skipping zip building.")
                 
-        if not any([args.validate, args.package, args.mount]):
-            logger.info("No action requested. Use --validate, --package, or --mount.")
+        if not any([args.validate, args.package, args.mount, args.extract, args.check_deps, args.sync_exports, args.generate_manifest, args.verify_env, args.lock_env]):
+            logger.info("No action requested. Check --help.")
             
     except Exception as e:
         logger.error(f"Execution failed: {e}")

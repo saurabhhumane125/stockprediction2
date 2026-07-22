@@ -44,7 +44,11 @@ class ColabBootstrap:
             logger.error("[Bootstrap] Environment manifest verification failed. Aborting.")
             raise RuntimeError("Colab environment manifest mismatch.")
             
-        # 6. Validation
+        # 6. Dataset Synchronization
+        from ml_engine.colab.dataset_sync import DatasetSynchronizer
+        DatasetSynchronizer.sync(dataset_version)
+            
+        # 7. Validation
         valid = ExecutionValidator.validate_pre_flight(dataset_version)
         
         if valid:

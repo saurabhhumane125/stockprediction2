@@ -34,8 +34,16 @@ class ResumeManager:
         candidates = []
         for root, dirs, files in os.walk(base_dir):
             if "checkpoints" in dirs:
-                # verify latest_checkpoint.pt exists
-                if os.path.exists(os.path.join(root, "checkpoints", "latest_checkpoint.pt")):
+                # Ensure there's a checkpoint to resume from
+                checkpoint_path = os.path.join(root, "checkpoints", "latest_checkpoint.pt")
+                if os.path.exists(checkpoint_path):
+                    from ml_engine.config.colab_config import ColabConfig
+                    policy = ColabConfig.get("resume_policy", "auto_resume")
+                    
+                    if policy == "abort":
+                        logger.info("[ResumeManager] Checkpoint found but policy is 'abort'. Will not resume.")
+                        continue
+                    
                     candidates.append(root)
 
         if not candidates:

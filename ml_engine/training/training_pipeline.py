@@ -52,7 +52,7 @@ def _compute_metrics(
     y_true: np.ndarray,
     y_pred: np.ndarray,
     y_prob: Optional[np.ndarray] = None,
-) -> Dict[str, float]:
+) -> Dict[str, Any]:
     """
     Compute accuracy, precision (macro), recall (macro), F1 (macro),
     and binary AUC (if probability scores are supplied).
@@ -62,9 +62,9 @@ def _compute_metrics(
         y_pred:  Predicted class labels (argmax of logits).
         y_prob:  Predicted probabilities for the positive class (optional).
     """
-    from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+    from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, confusion_matrix
 
-    metrics: Dict[str, float] = {
+    metrics: Dict[str, Any] = {
         "accuracy": float(accuracy_score(y_true, y_pred)),
         "precision": float(
             precision_score(y_true, y_pred, average="macro", zero_division=0)
@@ -72,6 +72,11 @@ def _compute_metrics(
         "recall": float(recall_score(y_true, y_pred, average="macro", zero_division=0)),
         "f1": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
     }
+    
+    # Confusion Matrix
+    cm = confusion_matrix(y_true, y_pred)
+    metrics["confusion_matrix"] = cm.tolist()
+    
     if y_prob is not None:
         try:
             from sklearn.metrics import roc_auc_score
@@ -178,6 +183,7 @@ class TrainingOrchestrator:
         encoder_path: Optional[str] = None,
         feature_names: Optional[List[str]] = None,
         tickers: Optional[List[str]] = None,
+        callbacks: Optional[List[Any]] = None,
     ) -> None:
         self.model_builder = model_builder
         self.tensor_storage = tensor_storage
@@ -189,6 +195,7 @@ class TrainingOrchestrator:
         self.encoder_path = encoder_path
         self.feature_names = feature_names or []
         self.tickers = tickers or []
+        self.callbacks = callbacks or []
         self.cfg = training_config
 
         os.makedirs(self.artifact_dir, exist_ok=True)
@@ -231,7 +238,15 @@ class TrainingOrchestrator:
         steps_per_epoch = len(train_loader)
 
         # 4. Device
-        device = torch.device(self.cfg.DEVICE)
+        if self.cfg.DEVICE == "auto":
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+            device = torch.device(self.cfg.DEVICE)
+        
+        # cuDNN Benchmark integration
+        if getattr(self.cfg, "CUDNN_BENCHMARK", False) and device.type == "cuda":
+            torch.backends.cudnn.benchmark = True
+            logger.info("[TrainingOrchestrator] Enabled cuDNN benchmark.")
 
         # 5. Model / Optimizer / Scheduler / GradScaler
         input_shape = (train_X.shape[1], train_X.shape[2])
@@ -261,6 +276,9 @@ class TrainingOrchestrator:
 
         for epoch in range(start_epoch, self.cfg.EPOCHS):
             epoch_start = time.time()
+            
+            for cb in self.callbacks:
+                cb.on_epoch_begin(epoch)
 
             train_metrics = self._train_epoch(
                 model, train_loader, optimizer, criterion, scaler, device, epoch
@@ -270,6 +288,9 @@ class TrainingOrchestrator:
             # Merge metrics
             epoch_metrics = {"epoch": epoch, **train_metrics, **val_metrics}
             history.append(epoch_metrics)
+            
+            for cb in self.callbacks:
+                cb.on_epoch_end(epoch, epoch_metrics)
 
             epoch_dur = time.time() - epoch_start
             logger.info(
@@ -288,6 +309,8 @@ class TrainingOrchestrator:
             # Checkpoint + early stopping
             stop = ckpt_manager.step(epoch, epoch_metrics, model, optimizer, scheduler)
             if stop:
+                for cb in self.callbacks:
+                    cb.on_early_stopping(epoch, ckpt_manager.best_epoch, ckpt_manager.best_value)
                 break
 
         # 9. Restore best weights
@@ -299,11 +322,19 @@ class TrainingOrchestrator:
         clf_metrics = _compute_metrics(all_true, all_preds, all_probs)
         eval_metrics.update(clf_metrics)
         logger.info(f"[TrainingOrchestrator] Test evaluation: {eval_metrics}")
-
+        
+        # 10.5 Fit Calibration on validation set
+        val_preds, val_probs, val_true = self._collect_predictions(model, val_loader, device)
+        from ml_engine.calibration.calibrator import CalibrationManager
+        calibrator = CalibrationManager()
+        calibrator.fit(val_probs, val_true)
+        calibrator_path = os.path.join(self.artifact_dir, "calibrator.pkl")
+        calibrator.save(calibrator_path)
+        
         total_time = time.time() - wall_start
 
         # 11. Export artifacts
-        artifact_paths = self._export_artifacts(model, eval_metrics, total_time)
+        artifact_paths = self._export_artifacts(model, eval_metrics, total_time, calibrator_path)
 
         # 12. Register in RegistryManager
         self._register(artifact_paths)
@@ -337,9 +368,16 @@ class TrainingOrchestrator:
     def _load_tensors(
         self,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        import torch
+        
         def _load(split: str):
-            arrays = self.tensor_storage.load_arrays(f"{self.data_path}/{split}.npz")
-            return arrays["X"], arrays["y"]
+            filepath = os.path.join(self.tensor_storage.base_path, self.data_path, f"{split}.pt")
+            if not os.path.exists(filepath):
+                raise FileNotFoundError(f"Array file not found at {filepath}")
+            X_t, y_t = torch.load(filepath)
+            # The rest of the pipeline expects numpy arrays for TimeSeriesDataset/sklearn metrics,
+            # so we convert the loaded tensors back to numpy.
+            return X_t.numpy(), y_t.numpy()
 
         train_X, train_y = _load("train")
         val_X, val_y = _load("val")
@@ -475,7 +513,7 @@ class TrainingOrchestrator:
         }
 
     def _export_artifacts(
-        self, model: Any, eval_metrics: Dict[str, float], execution_time: float
+        self, model: Any, eval_metrics: Dict[str, float], execution_time: float, calibrator_path: str = None
     ) -> Dict[str, str]:
         import torch
 
@@ -504,7 +542,10 @@ class TrainingOrchestrator:
         metadata = {
             "version": self.version,
             "generated_at": datetime.now(tz=timezone.utc).isoformat(),
-            "evaluation_metrics": {k: round(float(v), 6) for k, v in eval_metrics.items()},
+            "evaluation_metrics": {
+                k: round(float(v), 6) if isinstance(v, (int, float)) or (isinstance(v, str) and v.replace('.','',1).isdigit()) else v 
+                for k, v in eval_metrics.items()
+            },
             "training_config": self.cfg.to_dict(),
             "feature_names": self.feature_names,
             "tickers": self.tickers,
@@ -520,6 +561,7 @@ class TrainingOrchestrator:
             "scaler.pkl": scaler_dest,
             "label_encoder.pkl": encoder_dest,
             "metadata.json": meta_path,
+            "calibrator.pkl": calibrator_path if calibrator_path else encoder_dest,
         }
 
     def _register(self, artifact_paths: Dict[str, str]) -> None:
@@ -542,8 +584,7 @@ class TrainingOrchestrator:
             elif required == "feature_scaler.pkl":
                 candidate_artifacts[required] = artifact_paths["scaler.pkl"]
             elif required == "calibrator.pkl":
-                # Reuse the label encoder as a stand-in until a calibrator is available
-                candidate_artifacts[required] = artifact_paths["label_encoder.pkl"]
+                candidate_artifacts[required] = artifact_paths.get("calibrator.pkl", artifact_paths["label_encoder.pkl"])
             elif required == "evaluation_report.json":
                 candidate_artifacts[required] = artifact_paths["metadata.json"]
             elif required == "calibration_report.json":

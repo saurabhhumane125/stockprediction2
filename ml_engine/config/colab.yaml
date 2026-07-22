@@ -1,0 +1,25 @@
+# ml_engine/config/colab.yaml
+# Production Configuration for Colab Execution
+
+project_root: "/content/drive/MyDrive/STOCK-PREDICTION"
+package_filename: "stockprediction_v2.zip"
+
+dataset_id: "NIFTY50/v2.0"
+experiment_name: "production_colab_run"
+
+# Export and Tracking Locations
+datasets_location: "datasets"
+packages_location: "packages"
+registry_location: "ml_engine/model_registry"
+exports_location: "artifacts/exports"
+artifacts_location: "artifacts/candidates"
+logs_location: "artifacts/logs"
+
+# Execution Policies
+device_selection_policy: "auto"     # "auto", "cuda", "cpu"
+resume_policy: "auto_resume"        # "auto_resume", "abort", "ask"
+
+# Training Defaults (can be overridden by CLI)
+default_model: "GRU"
+default_epochs: 100
+default_batch_size: 64

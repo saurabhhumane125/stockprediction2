@@ -34,13 +34,12 @@ def test_execution_validator(mock_exists):
         assert result is True
 
 
-@patch("sys.modules", {"google.colab": MagicMock()})
 def test_drive_manager_in_colab():
     # Because we mocked sys.modules to contain google.colab, it should attempt to mount
     with patch("os.path.exists", return_value=False):
         # We need to mock google.colab.drive so it doesn't actually error out
         mock_colab = MagicMock()
-        with patch.dict(sys.modules, {'google.colab': mock_colab}):
+        with patch.dict('sys.modules', {'google.colab': mock_colab}):
             DriveManager.mount()
             assert mock_colab.drive.mount.called
 

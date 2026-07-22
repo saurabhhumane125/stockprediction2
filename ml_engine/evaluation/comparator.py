@@ -88,6 +88,8 @@ class ModelComparator:
 
         def sort_key(row: ComparisonRow) -> float:
             val = row.metrics.get(self.primary_metric, float("nan"))
+            if not isinstance(val, (int, float)):
+                return float("-inf")
             return float("-inf") if math.isnan(val) else -val  # negate for desc sort
 
         rows.sort(key=sort_key)
@@ -114,7 +116,10 @@ class ModelComparator:
             values = [str(idx), row.model_name, row.version, row.verdict]
             for m in self.metrics_to_show:
                 val = row.metrics.get(m, float("nan"))
-                values.append("nan" if math.isnan(val) else f"{val:.4f}")
+                if not isinstance(val, (int, float)):
+                    values.append(str(val))
+                else:
+                    values.append("nan" if math.isnan(val) else f"{val:.4f}")
             lines.append("| " + " | ".join(values) + " |")
 
         return "\n".join(lines) + "\n"

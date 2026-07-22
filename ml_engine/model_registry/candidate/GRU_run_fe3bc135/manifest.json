@@ -1,0 +1,12 @@
+{
+    "model_version": "GRU_run_fe3bc135",
+    "authenticity": "REAL",
+    "registration_timestamp": "2026-07-20T15:34:50.091249+00:00",
+    "artifacts": {
+        "best_model.keras": "613f4ee86fb33231a04c940441e36f4b3133cb2f22cf0e8fc6a7461c4295c56c",
+        "feature_scaler.pkl": "9c298d589a2158eb513cb52191144518a2acab2cb0c04f1df14fca0f712fa4a1",
+        "calibrator.pkl": "101ffb7a29eedcc504f3fd2e7c97ffe5791cfaa6f9e8359ff7374d10b87c8b55",
+        "evaluation_report.json": "91ce351d0fafb2cee0e21d8e96b724a02b2a4d323e261eebc592c1f28dbf6eb5",
+        "calibration_report.json": "bd3b9507dc14a6fb284c58224ff1d9ebffa260a4ee5830261682fe030c41819d"
+    }
+}
