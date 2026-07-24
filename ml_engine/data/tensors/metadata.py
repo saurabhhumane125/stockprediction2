@@ -12,6 +12,7 @@ from typing import Dict, Any, List
 
 from ml_engine.config.training_config import training_config
 from ml_engine.colab.manifest_manager import ManifestManager
+from ml_engine.data.tensors.target_factory import TargetFactory
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +28,15 @@ class MetadataGenerator:
         val_shape: tuple,
         test_shape: tuple,
         y_train_dist: dict,
-        scaler_info: dict = None
+        scaler_info: dict = None,
+        target_cols: List[str] = None
     ) -> Dict[str, Any]:
         """
-        Creates the metadata dictionary tracking sizes, shapes, and features.
+        Creates the metadata dictionary tracking sizes, shapes, features, and targets.
         """
         logger.info("[Metadata] Generating tensor metadata...")
+        if target_cols is None:
+            target_cols = TargetFactory.get_target_cols(training_config.target)
         
         metadata = {
             "dataset_version": dataset_version,
@@ -42,12 +46,16 @@ class MetadataGenerator:
                 "count": len(feature_cols),
                 "order": feature_cols
             },
+            "feature_columns": feature_cols,
+            "target_columns": target_cols,
+            "feature_count": len(feature_cols),
+            "target_count": len(target_cols),
             "task_type": training_config.target.task_type.value,
             "target_type": training_config.target.target_type,
             "forecast_horizons": training_config.target.horizons,
             "primary_horizon": training_config.target.primary_horizon,
             "output_schema": {
-                "shape": [len(training_config.target.horizons)] if training_config.target.task_type.value == "MULTI_OUTPUT_REGRESSION" else [1]
+                "shape": [len(target_cols)]
             },
             "dimensions": {
                 "train_samples": train_shape[0],
@@ -64,3 +72,4 @@ class MetadataGenerator:
             metadata["preprocessing"] = scaler_info
             
         return metadata
+

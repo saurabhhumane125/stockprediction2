@@ -17,7 +17,14 @@ class TensorValidator:
     """Validates PyTorch tensors before serialization."""
 
     @staticmethod
-    def validate(X: np.ndarray, y: np.ndarray, expected_features: int, expected_seq_len: int, task_type: TaskType = TaskType.BINARY_CLASSIFICATION) -> bool:
+    def validate(
+        X: np.ndarray, 
+        y: np.ndarray, 
+        expected_features: int, 
+        expected_seq_len: int, 
+        task_type: TaskType = TaskType.BINARY_CLASSIFICATION,
+        expected_targets: int = 1
+    ) -> bool:
         """
         Validates the integrity of the generated tensors.
         """
@@ -35,6 +42,15 @@ class TensorValidator:
                 if X.shape[2] != expected_features:
                     logger.error(f"[Validator] Feature count mismatch: got {X.shape[2]}, expected {expected_features}")
                     return False
+
+            # Target shape validation
+            if len(y.shape) > 1:
+                if y.shape[1] != expected_targets:
+                    logger.error(f"[Validator] Target count mismatch: got {y.shape[1]}, expected {expected_targets}")
+                    return False
+            elif expected_targets != 1:
+                logger.error(f"[Validator] Expected {expected_targets} targets, but y is 1D array.")
+                return False
 
             # 2. NaNs / Infs
             if np.isnan(X).any() or np.isnan(y).any():
@@ -65,3 +81,4 @@ class TensorValidator:
         except Exception as e:
             logger.error(f"[Validator] Validation crashed: {e}")
             return False
+

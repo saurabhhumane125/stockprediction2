@@ -76,14 +76,11 @@ class TensorBuilder:
             
             df = pd.read_parquet(p_file)
             
-            # 1. Add Target
-            df = TargetFactory.generate(df, TrainingConfig.target)
-            
-            # Find all target columns (could be "target", "target_3", "return_5d" etc.)
-            target_cols = [c for c in df.columns if c == "target" or c.startswith("target_") or c.startswith("return_")]
+            # 1. Add Target explicitly from TargetFactory
+            df, target_cols = TargetFactory.generate(df, TrainingConfig.target)
             
             if feature_cols is None:
-                # Use all columns except ticker and targets (and index which is usually Date)
+                # Use all columns except ticker and targets
                 exclude = {"ticker"}.union(set(target_cols))
                 feature_cols = [c for c in df.columns if c not in exclude]
                 
@@ -177,9 +174,10 @@ class TensorBuilder:
         # 4. Validate
         logger.info("[TensorBuilder] Validating tensors...")
         task_type = getattr(training_config.target, "task_type", TaskType.BINARY_CLASSIFICATION)
-        valid = TensorValidator.validate(X_train, y_train, len(feature_cols), training_config.SEQUENCE_LENGTH, task_type)
-        valid = valid and (len(X_val) == 0 or TensorValidator.validate(X_val, y_val, len(feature_cols), training_config.SEQUENCE_LENGTH, task_type))
-        valid = valid and (len(X_test) == 0 or TensorValidator.validate(X_test, y_test, len(feature_cols), training_config.SEQUENCE_LENGTH, task_type))
+        expected_targets = len(target_cols)
+        valid = TensorValidator.validate(X_train, y_train, len(feature_cols), training_config.SEQUENCE_LENGTH, task_type, expected_targets)
+        valid = valid and (len(X_val) == 0 or TensorValidator.validate(X_val, y_val, len(feature_cols), training_config.SEQUENCE_LENGTH, task_type, expected_targets))
+        valid = valid and (len(X_test) == 0 or TensorValidator.validate(X_test, y_test, len(feature_cols), training_config.SEQUENCE_LENGTH, task_type, expected_targets))
         
         if not valid:
             logger.error("[TensorBuilder] Tensor validation failed. Aborting serialization.")
@@ -199,7 +197,8 @@ class TensorBuilder:
             X_val.shape,
             X_test.shape,
             target_dist,
-            scaler_info
+            scaler_info,
+            target_cols
         )
         
         # 6. Serialize

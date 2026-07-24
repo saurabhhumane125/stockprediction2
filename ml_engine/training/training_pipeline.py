@@ -459,8 +459,6 @@ class TrainingOrchestrator:
             # Support target dims like [N, 1] for regression by converting correctly
             if self.cfg.target.task_type in (TaskType.REGRESSION, TaskType.MULTI_OUTPUT_REGRESSION):
                 y_batch = y_batch.float().to(device)
-                if self.cfg.target.task_type == TaskType.REGRESSION and y_batch.dim() > 1 and y_batch.shape[1] > 1:
-                    y_batch = y_batch[:, -1:]
             else:
                 y_batch = y_batch.long().to(device)
 
@@ -505,8 +503,6 @@ class TrainingOrchestrator:
                 X_batch = X_batch.to(device)
                 if self.cfg.target.task_type in (TaskType.REGRESSION, TaskType.MULTI_OUTPUT_REGRESSION):
                     y_batch = y_batch.float().to(device)
-                    if self.cfg.target.task_type == TaskType.REGRESSION and y_batch.dim() > 1 and y_batch.shape[1] > 1:
-                        y_batch = y_batch[:, -1:]
                 else:
                     y_batch = y_batch.long().to(device)
                     

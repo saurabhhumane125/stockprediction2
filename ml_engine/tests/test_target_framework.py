@@ -20,7 +20,8 @@ class DummyTargetConfig:
 def test_target_factory_binary():
     df = pd.DataFrame({"close": [100, 101, 102, 100]})
     config = DummyTargetConfig(TaskType.BINARY_CLASSIFICATION)
-    df_out = TargetFactory.generate(df, config)
+    df_out, target_cols = TargetFactory.generate(df, config)
+    assert target_cols == ["target"]
     assert "target" in df_out.columns
     assert len(df_out) == 3
     assert df_out["target"].iloc[0] == 1 # 101 > 100
