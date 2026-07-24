@@ -407,10 +407,18 @@ class TrainingOrchestrator:
         test_y: np.ndarray,
     ):
         from torch.utils.data import DataLoader
+        import torch
 
-        train_ds = TimeSeriesDataset(train_X, train_y)
-        val_ds = TimeSeriesDataset(val_X, val_y)
-        test_ds = TimeSeriesDataset(test_X, test_y)
+        if self.cfg.target.task_type in (TaskType.REGRESSION, TaskType.MULTI_OUTPUT_REGRESSION):
+            y_dtype = torch.float32
+        else:
+            # Explicitly pass torch.long rather than relying on TimeSeriesDataset's implicit default
+            # to guarantee safe backward compatibility for legacy classification endpoints.
+            y_dtype = torch.long
+
+        train_ds = TimeSeriesDataset(train_X, train_y, y_dtype=y_dtype)
+        val_ds = TimeSeriesDataset(val_X, val_y, y_dtype=y_dtype)
+        test_ds = TimeSeriesDataset(test_X, test_y, y_dtype=y_dtype)
 
         common = dict(
             batch_size=self.cfg.BATCH_SIZE,

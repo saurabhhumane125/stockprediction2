@@ -67,14 +67,20 @@ try:
             y: Target array of shape (N,).
         """
 
-        def __init__(self, X: np.ndarray, y: np.ndarray) -> None:
+        def __init__(self, X: np.ndarray, y: np.ndarray, y_dtype=None) -> None:
             if len(X) != len(y):
                 raise ValueError(
                     f"X and y must have the same number of samples, "
                     f"got X={len(X)} y={len(y)}."
                 )
             self.X = torch.tensor(X, dtype=torch.float32)
-            self.y = torch.tensor(y, dtype=torch.long)
+            
+            # Default to torch.long for backward compatibility with legacy classification models.
+            # TrainingOrchestrator explicitly overrides this for regression tasks.
+            if y_dtype is None:
+                y_dtype = torch.long
+                
+            self.y = torch.tensor(y, dtype=y_dtype)
 
         def __len__(self) -> int:
             return len(self.X)
