@@ -168,10 +168,19 @@ class ProductionInferenceEngine:
         except Exception as e:
             raise InferenceInputError(f"Neural Network prediction failed. Details: {e}")
             
-        # 4. Calibration
+        # Task Type Resolution
+        task_type_str = self.manifest.get("task_type", "BINARY_CLASSIFICATION")
         try:
-            if self.calibrator:
-                if hasattr(self.calibrator, "predict_proba"):
+            task_type = TaskType(task_type_str)
+        except ValueError:
+            task_type = TaskType.BINARY_CLASSIFICATION
+
+        # 4. Calibration (TaskType-Aware)
+        try:
+            if self.calibrator and task_type == TaskType.BINARY_CLASSIFICATION:
+                if isinstance(self.calibrator, CalibrationManager):
+                    calibrated_probs = self.calibrator.transform(raw_logits)
+                elif hasattr(self.calibrator, "predict_proba"):
                     calibrated_probs = self.calibrator.predict_proba(raw_logits.reshape(-1, 1))[:, 1]
                 else:
                     calibrated_probs = self.calibrator.predict(raw_logits)
@@ -185,12 +194,6 @@ class ProductionInferenceEngine:
         
         # 5. Build Reports
         results = []
-        
-        task_type_str = self.manifest.get("task_type", "BINARY_CLASSIFICATION")
-        try:
-            task_type = TaskType(task_type_str)
-        except ValueError:
-            task_type = TaskType.BINARY_CLASSIFICATION
 
         for raw in raw_logits:
             decoded = PredictionDecoder.decode(raw, task_type, calibrator=self.calibrator)

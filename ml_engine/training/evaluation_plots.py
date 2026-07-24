@@ -6,6 +6,8 @@ Utilities to generate diagnostic evaluation plots and threshold optimizations.
 """
 import os
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from sklearn.metrics import (
     roc_curve, auc, precision_recall_curve, average_precision_score,
@@ -161,3 +163,60 @@ def generate_evaluation_plots(
     paths['metrics_vs_threshold'] = f"{prefix}_metrics_vs_threshold.png"
 
     return paths
+
+
+def generate_regression_evaluation_plots(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    output_dir: str,
+    prefix: str = "val"
+) -> dict:
+    """
+    Generate diagnostic evaluation plots for regression tasks.
+    Args:
+        y_true: Ground truth target values
+        y_pred: Model prediction values
+        output_dir: Directory to save plots
+        prefix: Prefix for filenames ('val' or 'test')
+    Returns:
+        dict mapping plot names to filenames.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    paths = {}
+    
+    y_t = y_true.squeeze()
+    y_p = y_pred.squeeze()
+
+    # 1. Prediction vs Actual Scatter Plot
+    plt.figure(figsize=(6, 5))
+    plt.scatter(y_t, y_p, alpha=0.3, color='blue', edgecolors='none', s=15)
+    min_val = min(np.min(y_t), np.min(y_p))
+    max_val = max(np.max(y_t), np.max(y_p))
+    plt.plot([min_val, max_val], [min_val, max_val], color='red', linestyle='--', label='1:1 Line')
+    plt.xlabel('Actual Target')
+    plt.ylabel('Predicted Target')
+    plt.title(f'{prefix.capitalize()} Predicted vs Actual')
+    plt.legend(loc='upper left')
+    plt.grid(True, alpha=0.3)
+    p = os.path.join(output_dir, f"{prefix}_pred_vs_actual.png")
+    plt.savefig(p, bbox_inches='tight', dpi=100)
+    plt.close()
+    paths['pred_vs_actual'] = f"{prefix}_pred_vs_actual.png"
+
+    # 2. Residual Distribution Histogram
+    residuals = y_t - y_p
+    plt.figure(figsize=(6, 5))
+    plt.hist(residuals, bins=50, color='teal', alpha=0.7, edgecolor='black')
+    plt.axvline(0, color='red', linestyle='--', label='Zero Error')
+    plt.xlabel('Residual (Actual - Predicted)')
+    plt.ylabel('Frequency')
+    plt.title(f'{prefix.capitalize()} Residual Distribution')
+    plt.legend(loc='upper right')
+    plt.grid(True, alpha=0.3)
+    p = os.path.join(output_dir, f"{prefix}_residual_histogram.png")
+    plt.savefig(p, bbox_inches='tight', dpi=100)
+    plt.close()
+    paths['residual_histogram'] = f"{prefix}_residual_histogram.png"
+
+    return paths
+

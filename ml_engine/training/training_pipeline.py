@@ -320,52 +320,29 @@ class TrainingOrchestrator:
         # 9. Restore best weights
         ckpt_manager.restore_best(model)
 
-        # 10. Evaluate on test set
-        eval_metrics = self._eval_epoch(model, test_loader, criterion, device, prefix="test")
+        # 10. Task-Aware Post-Processing Dispatch
+        val_preds, val_probs, val_true, val_logits = self._collect_predictions(model, val_loader, device)
         test_preds, test_probs, test_true, test_logits = self._collect_predictions(model, test_loader, device)
         
-        # Slice class-1 probability for AUC if binary
-        test_prob_auc = test_probs[:, 1] if test_probs.shape[1] == 2 else test_probs
-        clf_metrics = MetricsRegistry.evaluate(self.cfg.target.task_type, test_true, test_preds, test_prob_auc)
-        eval_metrics.update(clf_metrics)
-        logger.info(f"[TrainingOrchestrator] Test evaluation: {eval_metrics}")
-        
-        # 10.5 Fit Calibration and Generate Evaluation Plots on validation set
-        val_preds, val_probs, val_true, val_logits = self._collect_predictions(model, val_loader, device)
-        
-        from ml_engine.calibration.calibrator import CalibrationManager
-        calibrator = CalibrationManager()
-        calibrator.fit(val_probs[:, 1] if val_probs.shape[1] == 2 else val_probs, val_true)
-        calibrator_path = os.path.join(self.artifact_dir, "calibrator.pkl")
-        calibrator.save(calibrator_path)
+        eval_metrics = self._eval_epoch(model, test_loader, criterion, device, prefix="test")
 
-        # Generate diagnostic plots and optimize threshold
-        try:
-            from ml_engine.training.evaluation_plots import find_optimal_threshold, generate_evaluation_plots
-            
-            # Save raw arrays
-            np.save(os.path.join(self.artifact_dir, "val_logits.npy"), val_logits)
-            np.save(os.path.join(self.artifact_dir, "val_probs.npy"), val_probs)
-            np.save(os.path.join(self.artifact_dir, "test_logits.npy"), test_logits)
-            np.save(os.path.join(self.artifact_dir, "test_probs.npy"), test_probs)
-            
-            # Optimal threshold
-            optimal_thresh = find_optimal_threshold(val_true, val_probs[:, 1] if val_probs.shape[1] == 2 else val_probs)
-            eval_metrics["optimal_val_f1_threshold"] = optimal_thresh
-            
-            # Generate plots
-            val_plot_paths = generate_evaluation_plots(
-                val_true, val_probs[:, 1] if val_probs.shape[1] == 2 else val_probs, val_logits, self.artifact_dir, prefix="val"
-            )
-            test_plot_paths = generate_evaluation_plots(
-                test_true, test_probs[:, 1] if test_probs.shape[1] == 2 else test_probs, test_logits, self.artifact_dir, prefix="test"
-            )
-            
-            # Merge plot paths into metrics for the report generator to use
-            eval_metrics["plot_paths"] = {**val_plot_paths, **test_plot_paths}
-            
-        except ImportError as e:
-            logger.warning(f"[TrainingOrchestrator] Could not generate plots: {e}")
+        from ml_engine.training.post_processing import PostProcessingDispatcher
+        post_results = PostProcessingDispatcher.dispatch(
+            task_type=self.cfg.target.task_type,
+            val_true=val_true,
+            val_preds=val_preds,
+            val_probs=val_probs,
+            val_logits=val_logits,
+            test_true=test_true,
+            test_preds=test_preds,
+            test_probs=test_probs,
+            test_logits=test_logits,
+            artifact_dir=self.artifact_dir
+        )
+
+        eval_metrics.update(post_results.get("metrics", {}))
+        calibrator_path = post_results.get("calibrator_path")
+        logger.info(f"[TrainingOrchestrator] Task evaluation metrics: {eval_metrics}")
         
         total_time = time.time() - wall_start
 

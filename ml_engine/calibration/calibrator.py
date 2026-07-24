@@ -52,13 +52,16 @@ class CalibrationManager:
         if not self._fitted:
             raise RuntimeError("CalibrationManager must be fitted before transform.")
             
+        if self.method_name == "none":
+            return y_prob
+
         is_2d = y_prob.ndim > 1
-        probs_1d = y_prob[:, 1] if is_2d else y_prob
+        probs_1d = y_prob[:, 1] if (is_2d and y_prob.shape[1] > 1) else y_prob
         
         calibrated_1d = self.calibrator.transform(probs_1d)
         calibrated_1d = np.clip(calibrated_1d, 0.0, 1.0)
         
-        if is_2d:
+        if is_2d and y_prob.shape[1] == 2:
             # Reconstruct 2D array [P(y=0), P(y=1)]
             calibrated_2d = np.zeros_like(y_prob)
             calibrated_2d[:, 1] = calibrated_1d
