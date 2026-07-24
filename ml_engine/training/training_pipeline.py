@@ -640,7 +640,7 @@ class TrainingOrchestrator:
             "output_dimension": out_dim,
             "feature_order": self.feature_names,
             "feature_count": len(self.feature_names),
-            "decoder": "PredictionDecoder",
+            "decoder": getattr(training_config.target, "strategy_name", "legacy"),
             "loss": "LossFactory_dynamic",
             "metrics": "MetricsRegistry_dynamic",
             "dataset_version": self.data_path,

@@ -12,6 +12,8 @@ class TrainingConfig:
     
     # ── Target Configuration ────────────────────────────────────────────────────
     class target:
+        strategy_name: str = "legacy"
+        strategy_version: str = "1.0"
         task_type: TaskType = TaskType.REGRESSION
         target_type: str = "RETURN" # LOG_RETURN, RETURN, PRICE, CLASS
         horizons: List[int] = [5]

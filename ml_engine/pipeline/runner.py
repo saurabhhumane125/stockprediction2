@@ -23,7 +23,7 @@ from ml_engine.data.datasets.builder import DatasetBuilder
 from ml_engine.data.datasets.sequence_builder import SequenceBuilder
 from ml_engine.training.keras_trainer import KerasTrainer
 from ml_engine.evaluation.evaluator import ProductionEvaluator
-from ml_engine.calibration.calibrator import ProductionCalibrator
+from ml_engine.calibration.calibrator import CalibrationManager
 from ml_engine.registry.manager import RegistryManager
 from ml_engine.config.registry_config import registry_config
 from ml_engine.inference.engine import ProductionInferenceEngine
@@ -187,13 +187,27 @@ class PipelineRunner:
             
         elif stage == pipeline_config.STAGE_CALIBRATE:
             version = self.context.get("dataset_version", "v1")
-            calibrator = ProductionCalibrator(
-                ticker=self.ticker,
-                dataset_version=version,
-                model_dir=os.path.join(self.base_dir, "models"),
-                tensor_storage=self.tensor_storage
-            )
-            report_path = calibrator.calibrate()
+            model_dir = os.path.join(self.base_dir, "models", self.ticker, version)
+            model_path = os.path.join(model_dir, "best_model.keras")
+            val_path = f"{self.ticker}/{version}/val.npz"
+            
+            X_val, y_val = self.tensor_storage.load_arrays(val_path)
+            
+            import tensorflow as tf
+            model = tf.keras.models.load_model(model_path)
+            y_prob = model.predict(X_val, batch_size=training_config.BATCH_SIZE, verbose=0)
+            
+            from ml_engine.calibration.calibrator import CalibrationManager
+            calibrator = CalibrationManager()
+            calibrator.fit(y_prob, y_val)
+            
+            calibrator_path = os.path.join(model_dir, "calibrator.pkl")
+            calibrator.save(calibrator_path)
+            
+            report_path = os.path.join(model_dir, "calibration_report.json")
+            with open(report_path, "w") as f:
+                json.dump({"status": "calibrated", "method": calibrator.method_name}, f)
+                
             self.context["calibration_report"] = report_path
             
         elif stage == pipeline_config.STAGE_REGISTER:

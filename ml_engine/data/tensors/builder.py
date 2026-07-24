@@ -14,7 +14,7 @@ import joblib
 import hashlib
 from sklearn.preprocessing import StandardScaler
 
-from ml_engine.data.tensors.target_factory import TargetFactory
+from ml_engine.data.tensors.targets.manager import TargetManager
 from ml_engine.core.types import TaskType
 from ml_engine.config.training_config import TrainingConfig
 from ml_engine.data.tensors.window_generator import WindowGenerator
@@ -76,8 +76,9 @@ class TensorBuilder:
             
             df = pd.read_parquet(p_file)
             
-            # 1. Add Target explicitly from TargetFactory
-            df, target_cols = TargetFactory.generate(df, TrainingConfig.target)
+            # 1. Add Target explicitly from TargetStrategy
+            target_strategy = TargetManager.get_strategy(TrainingConfig)
+            df, target_cols = target_strategy.generate(df, TrainingConfig.target)
             
             if feature_cols is None:
                 # Use all columns except ticker and targets

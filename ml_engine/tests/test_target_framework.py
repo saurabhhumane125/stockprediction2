@@ -4,10 +4,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 from ml_engine.core.types import TaskType
-from ml_engine.data.tensors.target_factory import TargetFactory
+from ml_engine.data.tensors.targets.manager import TargetManager
+from ml_engine.data.tensors.targets.strategies.legacy import LegacyTargetStrategy
+from ml_engine.inference.decoders.legacy_decoder import LegacyInferenceDecoder
 from ml_engine.training.loss_factory import LossFactory
 from ml_engine.training.metrics_registry import MetricsRegistry
-from ml_engine.inference.decoder import PredictionDecoder
 
 class DummyTargetConfig:
     def __init__(self, task_type, target_type="CLASS", horizons=[1], primary_horizon=1, thresholds=[0.0]):
@@ -16,11 +17,18 @@ class DummyTargetConfig:
         self.horizons = horizons
         self.primary_horizon = primary_horizon
         self.thresholds = thresholds
+        self.strategy_name = "legacy"
+        self.strategy_version = "1.0"
+
+class DummyConfig:
+    def __init__(self, task_type):
+        self.target = DummyTargetConfig(task_type)
 
 def test_target_factory_binary():
     df = pd.DataFrame({"close": [100, 101, 102, 100]})
-    config = DummyTargetConfig(TaskType.BINARY_CLASSIFICATION)
-    df_out, target_cols = TargetFactory.generate(df, config)
+    config = DummyConfig(TaskType.BINARY_CLASSIFICATION)
+    target_strategy = TargetManager.get_strategy(config)
+    df_out, target_cols = target_strategy.generate(df, config.target)
     assert target_cols == ["target"]
     assert "target" in df_out.columns
     assert len(df_out) == 3
@@ -43,6 +51,8 @@ def test_metrics_registry():
 
 def test_prediction_decoder():
     raw_logit = np.array([-1.0, 2.0]) # Class 1 wins
-    decoded = PredictionDecoder.decode(raw_logit, TaskType.MULTICLASS_CLASSIFICATION)
+    metadata = {"strategy_name": "legacy", "strategy_version": "1.0", "task_type": "MULTICLASS_CLASSIFICATION"}
+    decoder = TargetManager.get_decoder(metadata)
+    decoded = decoder.decode(raw_logit, None, metadata)
     assert decoded["predicted_class"] == 1
     assert "class_probabilities" in decoded

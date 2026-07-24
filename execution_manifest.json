@@ -7,7 +7,7 @@
     "pandas_version": "3.0.3",
     "scikit_learn_version": "1.7.1",
     "optuna_version": "4.9.0",
-    "config_hash": "c6de5914ef9063063af83eba22474888d551d2925f099e435ee2216a628925ca",
+    "config_hash": "0dc3f79949f695b2d891e5c2138bfe8b1dad3ae92c9f06fb4cd88455f37623be",
     "dataset_version": "NIFTY50/v2.0",
     "registry_version": "LATEST"
 }

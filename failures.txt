@@ -1,0 +1,585 @@
+
+_____________________________ test_full_pipeline ______________________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_________________________________ test_health _________________________________
+
+client = <starlette.testclient.TestClient object at 0x000001E9F600FA50>
+
+    def test_health(client):
+    
+        response = client.get("/health")
+    
+        assert response.status_code == 200
+    
+>       assert response.json() == {
+            "status": "healthy",
+        }
+E       AssertionError: assert {'status': 'h... None}, ...}}} == {'status': 'healthy'}
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Left contains 1 more item:
+E         {'vision_ai': {'components': {'artifact_storage': {'details': None,
+E                                                            'status': 'ok'},
+E                                       'inference': {'details': 'Inference Service '
+E                                                                'active',...
+E         
+E         ...Full output truncated (11 lines hidden), use '-vv' to show
+
+D:\STOCK-PREDICTION\backend\tests\api\test_health.py:18: AssertionError
+______________________________ test_valid_chart _______________________________
+
+ocr_svc = <app.services.ocr.ocr_service.OCRService object at 0x000001EA36FB9DD0>
+test_image_dir = 'C:\\Users\\sanke\\AppData\\Local\\Temp\\pytest-of-sanke\\pytest-19\\test_valid_chart0\\test_images'
+
+    def test_valid_chart(ocr_svc, test_image_dir):
+        img_path = os.path.join(test_image_dir, "valid_chart.png")
+        result = ocr_svc.process_image(img_path)
+    
+        assert result.success is True
+        assert result.confidence == 0.95
+>       assert result.metadata.symbol.value == "RELIANCE"
+E       AssertionError: assert 'RELIANCE.NS' == 'RELIANCE'
+E         
+E         - RELIANCE
+E         + RELIANCE.NS
+E         ?         +++
+
+backend\tests\integration\services\test_ocr_service.py:39: AssertionError
+_________________________ test_feature_pipeline_valid _________________________
+
+mock_download = <MagicMock name='download' id='2105456540752'>
+
+    @patch("ml_engine.data.download.yfinance_downloader.YFinanceDownloader.download")
+    def test_feature_pipeline_valid(mock_download):
+        np.random.seed(42)
+        dates = pd.date_range("2026-01-01", periods=150, tz=None)
+        data = {
+            "open": np.random.uniform(10, 20, 150),
+            "high": np.random.uniform(20, 25, 150),
+            "low": np.random.uniform(5, 10, 150),
+            "close": np.random.uniform(10, 20, 150),
+            "volume": np.random.uniform(1000, 5000, 150)
+        }
+        df = pd.DataFrame(data, index=dates)
+        mock_download.return_value = df
+    
+        # We choose a target timestamp that allows exactly required_rows (49) backwards
+        # 2026-01-01 + 140 days = 2026-05-21
+        target_dt = "2026-05-21T00:00:00"
+    
+        session = VisionSession(
+            request_id="test2",
+            upload_metadata={},
+            ocr_metadata=ChartMetadata(symbol=ExtractedField(value="RELIANCE", confidence=1.0, source_engine="test")),
+            resolved_ohlc=NormalizedOHLC(open=15, high=22, low=8, close=18, volume=2000, timestamp=target_dt),
+            provider_used="yfinance",
+            validation_result=ValidationResult(is_valid=True),
+            processing_time_ms=10.0
+        )
+    
+>       result = feature_pipeline.process(session)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+backend\tests\integration\services\test_vision_feature_pipeline.py:51: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <app.services.vision.feature_pipeline.VisionFeaturePipeline object at 0x000001E9C094BD90>
+session = VisionSession(request_id='test2', upload_metadata={}, ocr_metadata=ChartMetadata(symbol=ExtractedField[str](value='REL...ce', validation_result=ValidationResult(is_valid=True, warnings=[], errors=[]), processing_time_ms=10.0, trace_id=None)
+
+    def process(self, session: VisionSession) -> VisionFeatureSet:
+        if not session.resolved_ohlc:
+            return VisionFeatureSet(
+                session_id=session.request_id,
+                features=[],
+                feature_names=[],
+                feature_hash="",
+                provenance=[],
+                is_valid=False,
+                warnings=["Cannot process feature pipeline: VisionSession has no resolved_ohlc."]
+            )
+    
+        from app.services.vision.date_resolver import vision_date_resolver
+    
+        provider_name = session.provider_used or provider_registry.get_default_provider_name()
+        provider = provider_registry.get_provider(provider_name)
+    
+        raw_target_dt = pd.to_datetime(session.resolved_ohlc.timestamp).to_pydatetime()
+        if raw_target_dt.tzinfo is None:
+>           raw_target_dt = raw_target_dt.replace(tzinfo=timezone.utc)
+                                                         ^^^^^^^^
+E           NameError: name 'timezone' is not defined
+
+backend\app\services\vision\feature_pipeline.py:43: NameError
+___________________ test_feature_pipeline_insufficient_data ___________________
+
+mock_download = <MagicMock name='download' id='2105456408464'>
+
+    @patch("ml_engine.data.download.yfinance_downloader.YFinanceDownloader.download")
+    def test_feature_pipeline_insufficient_data(mock_download):
+        # Only 30 days of data provided, not enough for lookbacks or sequences
+        dates = pd.date_range("2026-01-01", periods=30, tz=None)
+        data = {
+            "open": np.random.uniform(10, 20, 30),
+            "high": np.random.uniform(20, 25, 30),
+            "low": np.random.uniform(5, 10, 30),
+            "close": np.random.uniform(10, 20, 30),
+            "volume": np.random.uniform(1000, 5000, 30)
+        }
+        df = pd.DataFrame(data, index=dates)
+        mock_download.return_value = df
+    
+        target_dt = "2026-01-20T00:00:00"
+    
+        session = VisionSession(
+            request_id="test3",
+            upload_metadata={},
+            ocr_metadata=ChartMetadata(symbol=ExtractedField(value="RELIANCE", confidence=1.0, source_engine="test")),
+            resolved_ohlc=NormalizedOHLC(open=15, high=22, low=8, close=18, volume=2000, timestamp=target_dt),
+            provider_used="yfinance",
+            validation_result=ValidationResult(is_valid=True),
+            processing_time_ms=10.0
+        )
+    
+>       result = feature_pipeline.process(session)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+backend\tests\integration\services\test_vision_feature_pipeline.py:84: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <app.services.vision.feature_pipeline.VisionFeaturePipeline object at 0x000001E9C094BD90>
+session = VisionSession(request_id='test3', upload_metadata={}, ocr_metadata=ChartMetadata(symbol=ExtractedField[str](value='REL...ce', validation_result=ValidationResult(is_valid=True, warnings=[], errors=[]), processing_time_ms=10.0, trace_id=None)
+
+    def process(self, session: VisionSession) -> VisionFeatureSet:
+        if not session.resolved_ohlc:
+            return VisionFeatureSet(
+                session_id=session.request_id,
+                features=[],
+                feature_names=[],
+                feature_hash="",
+                provenance=[],
+                is_valid=False,
+                warnings=["Cannot process feature pipeline: VisionSession has no resolved_ohlc."]
+            )
+    
+        from app.services.vision.date_resolver import vision_date_resolver
+    
+        provider_name = session.provider_used or provider_registry.get_default_provider_name()
+        provider = provider_registry.get_provider(provider_name)
+    
+        raw_target_dt = pd.to_datetime(session.resolved_ohlc.timestamp).to_pydatetime()
+        if raw_target_dt.tzinfo is None:
+>           raw_target_dt = raw_target_dt.replace(tzinfo=timezone.utc)
+                                                         ^^^^^^^^
+E           NameError: name 'timezone' is not defined
+
+backend\app\services\vision\feature_pipeline.py:43: NameError
+__________________________ test_ohlc_resolver_valid ___________________________
+
+mock_download = <MagicMock name='download' id='2105456224400'>
+
+    @patch("ml_engine.data.download.yfinance_downloader.YFinanceDownloader.download")
+    def test_ohlc_resolver_valid(mock_download):
+        """Test successful OHLC resolution."""
+        # Mock YFinance returning data
+        dates = pd.date_range("2026-07-10", periods=3, tz=None)
+        mock_df = pd.DataFrame({
+            "open": [10, 11, 12],
+            "high": [15, 16, 17],
+            "low": [5, 6, 7],
+            "close": [12, 13, 14],
+            "volume": [100, 200, 300],
+        }, index=dates)
+    
+        mock_download.return_value = mock_df
+    
+        meta = ChartMetadata(
+            symbol=_f("RELIANCE.NS"),
+            timeframe=_f("1d"),
+            timestamp=_f("2026-07-12T00:00:00Z") # Matches last row closely
+        )
+    
+        ohlc = ohlc_resolver.resolve(meta)
+    
+        assert ohlc is not None
+>       assert ohlc.close == 14.0
+E       AssertionError: assert 12.0 == 14.0
+E        +  where 12.0 = NormalizedOHLC(open=10.0, high=15.0, low=5.0, close=12.0, volume=100.0, timestamp='2026-07-10T00:00:00Z').close
+
+backend\tests\integration\services\test_vision_resolvers.py:69: AssertionError
+------------------------------ Captured log call ------------------------------
+WARNING  app.services.vision.ohlc_resolver:ohlc_resolver.py:50 DateResolver Warning: Requested date fell on a weekend. Rolled back to previous business day.
+_____________________ test_calibration_manager_execution ______________________
+
+mock_calibration_env = (<ml_engine.data.storage.numpy_storage.NumpyStorage object at 0x000001EA37126110>, 'C:\\Users\\sanke\\AppData\\Local\\...cal\\Temp\\tmpadxgsxpi\\mock_model.keras', 'C:\\Users\\sanke\\AppData\\Local\\Temp\\tmpadxgsxpi\\artifacts', 'MOCK/v1')
+
+    def test_calibration_manager_execution(mock_calibration_env):
+        storage, tmpdir, model_path, artifact_dir, data_path = mock_calibration_env
+    
+        # Load data and model
+        X_val, y_val = storage.load_arrays(f"{data_path}/val.npz")
+        model = tf.keras.models.load_model(model_path)
+    
+>       y_prob = model.predict(X_val, verbose=0)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+ml_engine\tests\test_calibrator.py:53: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Python311\Lib\site-packages\keras\src\utils\traceback_utils.py:122: in error_handler
+    raise e.with_traceback(filtered_tb) from None
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+x = 'X', y = None, sample_weight = None, batch_size = None
+steps_per_epoch = None, shuffle = False, class_weight = None
+
+    def get_data_adapter(
+        x,
+        y=None,
+        sample_weight=None,
+        batch_size=None,
+        steps_per_epoch=None,
+        shuffle=False,
+        class_weight=None,
+    ):
+        # Allow passing a custom data adapter.
+        if isinstance(x, data_adapter.DataAdapter):
+            return x
+    
+        # Check for multi-process/worker distribution.
+        distribution = distribution_lib.distribution()
+        if (
+            distribution is not None
+            and getattr(distribution, "_is_multi_process", False)
+            and getattr(distribution, "auto_shard_dataset", False)
+            and not is_tf_dataset(x)
+        ):
+            raise ValueError(
+                "When using a multi-worker distribution with auto-sharding enabled, "
+                "the data must be provided as a `tf.data.Dataset` instance. "
+                f"Received: type(x)={type(x)}. "
+                "If the dataset is already sharded across workers, then set "
+                "`distribution.auto_shard_dataset = False`."
+            )
+    
+        if array_data_adapter.can_convert_arrays((x, y, sample_weight)):
+            return ArrayDataAdapter(
+                x,
+                y,
+                sample_weight=sample_weight,
+                class_weight=class_weight,
+                shuffle=shuffle,
+                batch_size=batch_size,
+                steps=steps_per_epoch,
+            )
+        elif is_tf_dataset(x):
+            # Unsupported args: y, sample_weight, shuffle
+            if y is not None:
+                raise_unsupported_arg("y", "the targets", "tf.data.Dataset")
+            if sample_weight is not None:
+                raise_unsupported_arg(
+                    "sample_weights", "the sample weights", "tf.data.Dataset"
+                )
+            if shuffle:
+                warnings.warn(
+                    "`shuffle=True` was passed, but will be ignored since the "
+                    "data `x` was provided as a tf.data.Dataset. The Dataset is "
+                    "expected to already be shuffled "
+                    "(via `.shuffle(buffer_size)`).",
+                    stacklevel=2,
+                )
+            return TFDatasetAdapter(
+                x, class_weight=class_weight, distribution=distribution
+            )
+    
+        elif isinstance(x, py_dataset_adapter.PyDataset):
+            if y is not None:
+                raise_unsupported_arg("y", "the targets", "PyDataset")
+            if sample_weight is not None:
+                raise_unsupported_arg(
+                    "sample_weights", "the sample weights", "PyDataset"
+                )
+            if getattr(x, "num_batches", None) is None and shuffle:
+                warnings.warn(
+                    "`shuffle=True` was passed, but will be ignored since the "
+                    "data `x` was provided as an infinite PyDataset. The "
+                    "PyDataset is expected to already be shuffled.",
+                    stacklevel=2,
+                )
+            return PyDatasetAdapter(x, class_weight=class_weight, shuffle=shuffle)
+    
+        elif is_torch_dataloader(x):
+            if y is not None:
+                raise_unsupported_arg("y", "the targets", "torch DataLoader")
+            if sample_weight is not None:
+                raise_unsupported_arg(
+                    "sample_weights", "the sample weights", "torch DataLoader"
+                )
+            if class_weight is not None:
+                raise ValueError(
+                    "Argument `class_weight` is not supported for torch "
+                    f"DataLoader inputs. You can modify your `__getitem__ ` method"
+                    " to return input tensor, label and class_weight. "
+                    "Alternatively, use a custom training loop. See the User Guide "
+                    "https://keras.io/guides/custom_train_step_in_torch/"
+                    "#supporting-sampleweight-amp-classweight for more details. "
+                    f"Received: class_weight={class_weight}"
+                )
+            if shuffle:
+                warnings.warn(
+                    "`shuffle=True` was passed, but will be ignored since the "
+                    "data `x` was provided as a torch DataLoader. The DataLoader "
+                    "is expected to already be shuffled.",
+                    stacklevel=2,
+                )
+            return TorchDataLoaderAdapter(x)
+    
+        elif is_grain_dataset(x):
+            if y is not None:
+                raise_unsupported_arg(
+                    "y", "the targets", "grain.Dataset and grain.DataLoader"
+                )
+            if sample_weight is not None:
+                raise_unsupported_arg(
+                    "sample_weights",
+                    "the sample weights",
+                    "grain.Dataset and grain.DataLoader",
+                )
+            if class_weight is not None:
+                raise ValueError(
+                    "Argument `class_weight` is not supported for grain.Dataset "
+                    f"and grain.DataLoader inputs. You can modify your "
+                    "`__getitem__ ` method to return input tensor, label and "
+                    "class_weight. "
+                    f"Received: class_weight={class_weight}"
+                )
+            if shuffle:
+                warnings.warn(
+                    "`shuffle=True` was passed, but will be ignored since the "
+                    "data `x` was provided as a grain dataset. The grain dataset "
+                    "is expected to already be shuffled.",
+                    stacklevel=2,
+                )
+            return GrainDatasetAdapter(x)
+    
+        elif isinstance(x, types.GeneratorType):
+            if y is not None:
+                raise_unsupported_arg("y", "the targets", "generator")
+            if sample_weight is not None:
+                raise_unsupported_arg(
+                    "sample_weights", "the sample weights", "generator"
+                )
+            if class_weight is not None:
+                raise ValueError(
+                    "Argument `class_weight` is not supported for Python "
+                    f"generator inputs. Received: class_weight={class_weight}"
+                )
+            if shuffle:
+                warnings.warn(
+                    "`shuffle=True` was passed, but will be ignored since the "
+                    "data `x` was provided as a generator. The generator "
+                    "is expected to yield already-shuffled data.",
+                    stacklevel=2,
+                )
+            return GeneratorDataAdapter(x)
+        else:
+>           raise ValueError(f"Unrecognized data type: x={x} (of type {type(x)})")
+E           ValueError: Unrecognized data type: x=X (of type <class 'str'>)
+
+C:\Python311\Lib\site-packages\keras\src\trainers\data_adapters\__init__.py:172: ValueError
+____________________________ test_package_builder _____________________________
+
+mock_make_archive = <MagicMock name='make_archive' id='2105457843152'>
+
+    @patch("shutil.make_archive")
+    def test_package_builder(mock_make_archive):
+        with patch("os.path.exists", return_value=True):
+            PackageBuilder.build("dummy.zip")
+>           mock_make_archive.assert_called_once()
+
+ml_engine\tests\test_colab.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <MagicMock name='make_archive' id='2105457843152'>
+
+    def assert_called_once(self):
+        """assert that the mock was called only once.
+        """
+        if not self.call_count == 1:
+            msg = ("Expected '%s' to have been called once. Called %s times.%s"
+                   % (self._mock_name or 'mock',
+                      self.call_count,
+                      self._calls_repr()))
+>           raise AssertionError(msg)
+E           AssertionError: Expected 'make_archive' to have been called once. Called 0 times.
+
+C:\Python311\Lib\unittest\mock.py:918: AssertionError
+___________________________ test_tracker_lifecycle ____________________________
+
+temp_db = 'C:\\Users\\sanke\\AppData\\Local\\Temp\\pytest-of-sanke\\pytest-19\\test_tracker_lifecycle0\\tracking.db'
+
+    def test_tracker_lifecycle(temp_db):
+        tracker = ExperimentTracker("Test-Exp", "Run-1", db_path=temp_db)
+    
+        # Log some data
+        tracker.log_parameters({"learning_rate": 0.01, "epochs": 50})
+        tracker.log_metrics({"f1_score": 0.85, "accuracy": 0.90})
+        tracker.log_artifacts({"model": "models/v1.pkl"})
+    
+        tracker.end_run("COMPLETED")
+    
+        # Verify via Manager
+        manager = ExperimentManager(temp_db)
+    
+        # Check Experiments
+        exps = manager.list_experiments()
+        assert len(exps) == 1
+        assert exps[0].name == "Test-Exp"
+    
+        # Check Runs
+        runs = manager.list_runs("Test-Exp")
+        assert len(runs) == 1
+        run = runs[0]
+    
+        assert run.run_name == "Run-1"
+        assert run.status == "COMPLETED"
+    
+>       assert run.parameters["learning_rate"] == "0.01"
+E       AssertionError: assert 0.01 == '0.01'
+
+ml_engine\tests\test_experiments.py:52: AssertionError
+____________________ test_generate_dataset_dry_run_success ____________________
+
+mock_feat = <MagicMock name='generate_all_features' id='2105646678736'>
+mock_val = <MagicMock name='validate' id='2105640190032'>
+mock_dl = <MagicMock name='download_parallel' id='2105646731152'>
+mock_uni = <MagicMock name='get_universe' id='2105678374608'>
+
+    @patch("ml_engine.scripts.generate_dataset.sys.argv", ["generate_dataset.py", "--universe", "CORE", "--dataset-version", "v1.0", "--start-date", "2024-01-01", "--end-date", "2024-01-02", "--dry-run"])
+    @patch("ml_engine.scripts.generate_dataset.UniverseManager.get_universe")
+    @patch("ml_engine.scripts.generate_dataset.ParallelDownloadEngine.download_parallel")
+    @patch("ml_engine.scripts.generate_dataset.ProductionDataValidator.validate")
+    @patch("ml_engine.scripts.generate_dataset.FeatureGenerator.generate_all_features")
+    def test_generate_dataset_dry_run_success(mock_feat, mock_val, mock_dl, mock_uni):
+        mock_uni.return_value = ["TCS.NS"]
+    
+        # Mock download to return some dummy data
+        dates = pd.date_range("2024-01-01", periods=2)
+        df = pd.DataFrame({
+            "open": [100, 101], "high": [102, 103], "low": [99, 100], "close": [101, 102], "volume": [1000, 2000]
+        }, index=dates)
+        mock_dl.return_value = {"TCS.NS": df}
+    
+        # Mock validation success
+        mock_val.return_value = (True, {})
+    
+        # Mock features
+        mock_feat.return_value = df.copy()
+    
+        # Because it's a dry-run, sys.exit(0) is called at the end
+        with pytest.raises(SystemExit) as excinfo:
+            main()
+    
+>       assert excinfo.value.code == 0
+E       assert 1 == 0
+E        +  where 1 = SystemExit(1).code
+E        +    where SystemExit(1) = <ExceptionInfo SystemExit(1) tblen=2>.value
+
+ml_engine\tests\test_generate_dataset.py:65: AssertionError
+------------------------------ Captured log call ------------------------------
+ERROR    DatasetGenerator:generate_dataset.py:157 Failed to download NIFTY50 (^NSEI) benchmark. Aborting.
+________________ TestModelConfig.test_required_fields_present _________________
+
+self = <ml_engine.tests.test_models.TestModelConfig object at 0x000001E9F6AB0B10>
+
+    def test_required_fields_present(self):
+        from ml_engine.config.model_config import model_config
+        d = model_config.to_dict()
+        for field in [
+            "MODEL_TYPE", "HIDDEN_SIZE", "NUM_LAYERS", "DROPOUT",
+            "OUTPUT_CLASSES", "BIDIRECTIONAL", "ACTIVATION",
+            "NORMALIZATION", "DEVICE", "WEIGHT_INIT",
+            "TRANSFORMER_HEADS", "TRANSFORMER_FF_DIM", "TRANSFORMER_DEPTH",
+            # Legacy fields preserved for Keras compatibility
+            "GRU_HIDDEN_DIM", "GRU_LAYERS", "GRU_DROPOUT",
+            "BIGRU_HIDDEN_DIM", "BIGRU_LAYERS", "BIGRU_DROPOUT",
+        ]:
+>           assert field in d, f"Missing field: {field}"
+E           AssertionError: Missing field: OUTPUT_CLASSES
+E           assert 'OUTPUT_CLASSES' in {'MODEL_TYPE': 'GRU', 'HIDDEN_SIZE': 64, 'NUM_LAYERS': 2, 'DROPOUT': 0.2, ...}
+
+ml_engine\tests\test_models.py:59: AssertionError
+_______________ TestModelFactory.test_make_builder_forward_pass _______________
+
+self = <ml_engine.tests.test_models.TestModelFactory object at 0x000001E9F6AD3250>
+
+    def test_make_builder_forward_pass(self):
+        import torch
+        from ml_engine.models.model_factory import ModelFactory
+        builder = ModelFactory.make_builder(model_type="LSTM")
+        model = builder(input_shape=(SEQ, FEAT))
+        out = model(torch.randn(4, SEQ, FEAT))
+>       assert out.shape == (4, CLASSES)
+E       assert torch.Size([4, 1]) == (4, 2)
+E         
+E         At index 1 diff: 1 != 2
+E         Use -v to get more diff
+
+ml_engine\tests\test_models.py:349: AssertionError
+________________________ test_full_pipeline_execution _________________________
+
+args = ()
+keywargs = {'mock_pipeline_env': (<ml_engine.pipeline.runner.PipelineRunner object at 0x000001EA405CEF10>, 'C:\\Users\\sanke\\AppData\\Local\\Temp\\tmprhldfbo0')}
+
+    @wraps(func)
+    def patched(*args, **keywargs):
+>       with self.decoration_helper(patched,
+                                    args,
+                                    keywargs) as (newargs, newkeywargs):
+
+C:\Python311\Lib\unittest\mock.py:1375: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Python311\Lib\contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+C:\Python311\Lib\unittest\mock.py:1357: in decoration_helper
+    arg = exit_stack.enter_context(patching)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Python311\Lib\contextlib.py:517: in enter_context
+    result = _enter(cm)
+             ^^^^^^^^^^
+C:\Python311\Lib\unittest\mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <unittest.mock._patch object at 0x000001E9F6C98C90>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'ml_engine.pipeline.runner' from 'D:\\STOCK-PREDICTION-UI\\ml_engine\\pipeline\\runner.py'> does not have the attribute 'ProductionCalibrator'
+
+C:\Python311\Lib\unittest\mock.py:1419: AttributeError

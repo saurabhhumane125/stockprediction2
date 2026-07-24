@@ -13,7 +13,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 from ml_engine.config.training_config import training_config
 from ml_engine.core.types import TaskType
-from ml_engine.inference.decoder import PredictionDecoder
+from ml_engine.data.tensors.targets.manager import TargetManager
 from ml_engine.config.inference_config import inference_config
 from ml_engine.registry.manager import RegistryManager
 from ml_engine.inference.exceptions import (
@@ -138,7 +138,7 @@ class ProductionInferenceEngine:
         
         # Apply Scaling natively
         try:
-            features = self.scaler.transform(features)
+            scaled_features = self.scaler.transform(features)
         except Exception as e:
             raise InferenceInputError(f"Feature scaling failed. Details: {e}")
         
@@ -150,7 +150,8 @@ class ProductionInferenceEngine:
             )
             
         # Generate Windows Natively
-        sequences = self._create_windows(features)
+        sequences = self._create_windows(scaled_features)
+        raw_sequences = self._create_windows(features)
         
         if len(sequences) == 0:
             raise InferenceInputError("Failed to generate sequences from input data.")
@@ -195,8 +196,10 @@ class ProductionInferenceEngine:
         # 5. Build Reports
         results = []
 
-        for raw in raw_logits:
-            decoded = PredictionDecoder.decode(raw, task_type, calibrator=self.calibrator)
+        for i, raw in enumerate(raw_logits):
+            decoder = TargetManager.get_decoder(self.manifest)
+            current_raw_features = raw_sequences[i]
+            decoded = decoder.decode(raw, current_raw_features, self.manifest, calibrator=self.calibrator)
             
             report = {
                 "Model Version": self.active_version,

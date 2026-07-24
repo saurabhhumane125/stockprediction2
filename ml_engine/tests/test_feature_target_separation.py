@@ -4,45 +4,38 @@ import numpy as np
 from typing import List
 
 from ml_engine.core.types import TaskType
-from ml_engine.data.tensors.target_factory import TargetFactory
 from ml_engine.data.tensors.validator import TensorValidator
 from ml_engine.data.tensors.metadata import MetadataGenerator
+from ml_engine.data.tensors.targets.manager import TargetManager
 
+class DummyTargetConfig:
+    def __init__(self, task_type, target_type, horizons, primary_horizon):
+        self.task_type = task_type
+        self.target_type = target_type
+        self.horizons = horizons
+        self.primary_horizon = primary_horizon
+        self.thresholds = [0.0]
+        self.strategy_name = "legacy"
+        self.strategy_version = "1.0"
 
 class DummyRegressionConfig:
-    task_type = TaskType.REGRESSION
-    target_type = "RETURN"
-    horizons = [5]
-    primary_horizon = 5
-    thresholds = [0.0]
-
+    target = DummyTargetConfig(TaskType.REGRESSION, "RETURN", [5], 5)
 
 class DummyBinaryConfig:
-    task_type = TaskType.BINARY_CLASSIFICATION
-    target_type = "CLASS"
-    horizons = [1]
-    primary_horizon = 1
-    thresholds = [0.0]
-
+    target = DummyTargetConfig(TaskType.BINARY_CLASSIFICATION, "CLASS", [1], 1)
 
 class DummyMultiOutputConfig:
-    task_type = TaskType.MULTI_OUTPUT_REGRESSION
-    target_type = "RETURN"
-    horizons = [1, 3, 5, 10]
-    primary_horizon = 5
-    thresholds = [0.0]
-
+    target = DummyTargetConfig(TaskType.MULTI_OUTPUT_REGRESSION, "RETURN", [1, 3, 5, 10], 5)
 
 def test_target_factory_explicit_cols():
-    reg_cols = TargetFactory.get_target_cols(DummyRegressionConfig)
-    assert reg_cols == ["return_5d"]
+    reg_strategy = TargetManager.get_strategy(DummyRegressionConfig)
+    assert reg_strategy.get_target_cols(DummyRegressionConfig.target) == ["return_5d"]
 
-    bin_cols = TargetFactory.get_target_cols(DummyBinaryConfig)
-    assert bin_cols == ["target"]
+    bin_strategy = TargetManager.get_strategy(DummyBinaryConfig)
+    assert bin_strategy.get_target_cols(DummyBinaryConfig.target) == ["target"]
 
-    multi_cols = TargetFactory.get_target_cols(DummyMultiOutputConfig)
-    assert multi_cols == ["return_1d", "return_3d", "return_5d", "return_10d"]
-
+    multi_strategy = TargetManager.get_strategy(DummyMultiOutputConfig)
+    assert multi_strategy.get_target_cols(DummyMultiOutputConfig.target) == ["return_1d", "return_3d", "return_5d", "return_10d"]
 
 def test_feature_target_separation_with_return_lags():
     # Construct a sample dataframe with engineered return_lag features and close prices
@@ -57,7 +50,8 @@ def test_feature_target_separation_with_return_lags():
     }
     df = pd.DataFrame(data)
 
-    df_out, target_cols = TargetFactory.generate(df, DummyRegressionConfig)
+    reg_strategy = TargetManager.get_strategy(DummyRegressionConfig)
+    df_out, target_cols = reg_strategy.generate(df, DummyRegressionConfig.target)
 
     # 1. Target columns must be exactly ["return_5d"]
     assert target_cols == ["return_5d"]

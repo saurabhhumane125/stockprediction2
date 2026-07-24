@@ -7,7 +7,7 @@ import pytest
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import tensorflow as tf
 
-from ml_engine.calibration.calibrator import ProductionCalibrator
+from ml_engine.calibration.calibrator import CalibrationManager, CalibratedModelWrapper
 from ml_engine.data.storage.numpy_storage import NumpyStorage
 
 
@@ -43,47 +43,37 @@ def mock_calibration_env():
         yield storage, tmpdir, model_path, artifact_dir, base_path
 
 
-def test_production_calibrator_execution(mock_calibration_env):
+def test_calibration_manager_execution(mock_calibration_env):
     storage, tmpdir, model_path, artifact_dir, data_path = mock_calibration_env
+    
+    # Load data and model
+    X_val, y_val = storage.load_arrays(f"{data_path}/val.npz")
+    model = tf.keras.models.load_model(model_path)
+    
+    y_prob = model.predict(X_val, verbose=0)
     
     # Run calibration
-    calibrator = ProductionCalibrator(tensor_storage=storage, artifact_dir=artifact_dir)
-    report = calibrator.calibrate(model_path, data_path)
+    calibrator = CalibrationManager(method="isotonic")
+    calibrator.fit(y_prob, y_val)
     
-    # Assert JSON artifacts exist
-    assert os.path.exists(os.path.join(artifact_dir, "calibration_report.json"))
-    assert os.path.exists(os.path.join(artifact_dir, "calibration_metrics.json"))
-    assert os.path.exists(os.path.join(artifact_dir, "calibration_report.md"))
-    assert os.path.exists(os.path.join(artifact_dir, "calibrator.pkl"))
+    assert calibrator._fitted is True
     
-    # Assert Plots exist
-    plots_dir = os.path.join(artifact_dir, "plots")
-    assert os.path.exists(plots_dir)
-    assert os.path.exists(os.path.join(plots_dir, "reliability_before.png"))
-    assert os.path.exists(os.path.join(plots_dir, "reliability_after.png"))
-    assert os.path.exists(os.path.join(plots_dir, "confidence_distribution.png"))
+    y_prob_calibrated = calibrator.transform(y_prob)
+    assert y_prob_calibrated.shape == (30,)
+    assert np.all(y_prob_calibrated >= 0.0) and np.all(y_prob_calibrated <= 1.0)
     
-    # Assert report structure
-    assert report is not None
-    assert "Raw" in report["Metrics"]
-    assert "Platt Scaling" in report["Metrics"]
-    assert "Isotonic Regression" in report["Metrics"]
-    assert "Best Method" in report
+    # Test save/load
+    calib_path = os.path.join(tmpdir, "calibrator.pkl")
+    calibrator.save(calib_path)
+    assert os.path.exists(calib_path)
     
-    # Check JSON metrics
-    with open(os.path.join(artifact_dir, "calibration_metrics.json"), "r") as f:
-        metrics = json.load(f)
-        assert "brier_score" in metrics["Raw"]
+    loaded_calibrator = CalibrationManager.load(calib_path)
+    assert loaded_calibrator._fitted is True
+    assert loaded_calibrator.method_name == "isotonic"
 
 
-def test_production_calibrator_insufficient_data(mock_calibration_env):
-    storage, tmpdir, model_path, artifact_dir, data_path = mock_calibration_env
-    
-    # Create empty dataset
-    storage.save_arrays("EMPTY/v1/val.npz", X=np.array([]), y=np.array([]))
-    storage.save_arrays("EMPTY/v1/test.npz", X=np.array([]), y=np.array([]))
-    
-    calibrator = ProductionCalibrator(tensor_storage=storage, artifact_dir=artifact_dir)
-    
-    with pytest.raises(ValueError, match="Insufficient validation or testing data"):
-        calibrator.calibrate(model_path, "EMPTY/v1")
+def test_calibration_manager_not_fitted():
+    calibrator = CalibrationManager(method="isotonic")
+    with pytest.raises(RuntimeError, match="CalibrationManager must be fitted before transform."):
+        calibrator.transform(np.array([0.5, 0.6]))
+

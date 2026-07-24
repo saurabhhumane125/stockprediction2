@@ -74,11 +74,11 @@ def test_resume_manager(mock_mtime, mock_exists, mock_walk):
     assert latest == "artifacts/candidates/CORE_run_1"
 
 
-@patch("shutil.make_archive")
-def test_package_builder(mock_make_archive):
+@patch("zipfile.ZipFile")
+def test_package_builder(mock_zipfile):
     with patch("os.path.exists", return_value=True):
         PackageBuilder.build("dummy.zip")
-        mock_make_archive.assert_called_once()
+        mock_zipfile.assert_called_once()
         
 @patch("shutil.make_archive")
 @patch("shutil.copytree")

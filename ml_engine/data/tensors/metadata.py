@@ -12,7 +12,7 @@ from typing import Dict, Any, List
 
 from ml_engine.config.training_config import training_config
 from ml_engine.colab.manifest_manager import ManifestManager
-from ml_engine.data.tensors.target_factory import TargetFactory
+from ml_engine.data.tensors.targets.manager import TargetManager
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +35,11 @@ class MetadataGenerator:
         Creates the metadata dictionary tracking sizes, shapes, features, and targets.
         """
         logger.info("[Metadata] Generating tensor metadata...")
+        
+        target_strategy = TargetManager.get_strategy(training_config)
+        
         if target_cols is None:
-            target_cols = TargetFactory.get_target_cols(training_config.target)
+            target_cols = target_strategy.get_target_cols(training_config.target)
         
         metadata = {
             "dataset_version": dataset_version,
@@ -50,10 +53,13 @@ class MetadataGenerator:
             "target_columns": target_cols,
             "feature_count": len(feature_cols),
             "target_count": len(target_cols),
+            "target_contract_version": "1.0",
+            "strategy_name": target_strategy.strategy_name,
+            "strategy_version": target_strategy.strategy_version,
             "task_type": training_config.target.task_type.value,
-            "target_type": training_config.target.target_type,
-            "forecast_horizons": training_config.target.horizons,
-            "primary_horizon": training_config.target.primary_horizon,
+            "target_type": getattr(training_config.target, "target_type", "CLASS"),
+            "forecast_horizons": getattr(training_config.target, "horizons", [1]),
+            "primary_horizon": getattr(training_config.target, "primary_horizon", 1),
             "output_schema": {
                 "shape": [len(target_cols)]
             },
