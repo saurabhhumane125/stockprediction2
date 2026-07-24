@@ -149,7 +149,7 @@ class ProductionTrainingRunner:
         """Provides simulated results to prove integration wiring works."""
         os.makedirs(self.artifact_dir, exist_ok=True)
         # Create dummy artifacts to simulate export
-        for f in ["model.pt", "scaler.pkl", "label_encoder.pkl", "metadata.json"]:
+        for f in ["model.pt", "feature_scaler.pkl", "label_encoder.pkl", "metadata.json"]:
             with open(os.path.join(self.artifact_dir, f), "w") as fp:
                 fp.write("dummy")
                 
@@ -172,7 +172,7 @@ class ProductionTrainingRunner:
         
         candidate_artifacts = {
             "model.pt": os.path.join(art_dir, "model.pt"),
-            "scaler.pkl": os.path.join(art_dir, "scaler.pkl"),
+            "feature_scaler.pkl": os.path.join(art_dir, "feature_scaler.pkl"),
             "label_encoder.pkl": os.path.join(art_dir, "label_encoder.pkl"),
             "metadata.json": os.path.join(art_dir, "metadata.json")
         }

@@ -37,7 +37,8 @@ def test_registry_registration(mock_registry_env):
     manager, registry_path, source_artifacts = mock_registry_env
     
     version = "v1"
-    manifest = manager.register_candidate(version, source_artifacts)
+    metadata = {"model_file": "model_file"}
+    manifest = manager.register_candidate(version, source_artifacts, metadata=metadata)
     
     # Assert manifest returns properly
     assert manifest["model_version"] == version
@@ -56,8 +57,9 @@ def test_registry_registration(mock_registry_env):
 def test_registry_promotion(mock_registry_env):
     manager, registry_path, source_artifacts = mock_registry_env
     version = "v2"
+    metadata = {"model_file": "model_file"}
     
-    manager.register_candidate(version, source_artifacts)
+    manager.register_candidate(version, source_artifacts, metadata=metadata)
     manager.promote_model(version, registry_config.STATE_CANDIDATE, registry_config.STATE_STAGING)
     
     # Verify moved from candidate to staging
@@ -70,14 +72,15 @@ def test_registry_promotion(mock_registry_env):
     # Verify Active pointer
     active_model = manager.get_active_model()
     assert active_model["version"] == version
-    assert "best_model.keras" in active_model["model_path"]
+    assert "model_file" in active_model["model_path"]
 
 
 def test_hash_mismatch_validation(mock_registry_env):
     manager, registry_path, source_artifacts = mock_registry_env
     version = "v3"
+    metadata = {"model_file": "model_file"}
     
-    manager.register_candidate(version, source_artifacts)
+    manager.register_candidate(version, source_artifacts, metadata=metadata)
     
     # Intentionally corrupt the artifact in candidate folder
     candidate_model_path = os.path.join(
@@ -95,11 +98,12 @@ def test_rollback_production(mock_registry_env):
     manager, registry_path, source_artifacts = mock_registry_env
     
     # Register and Promote v1
-    manager.register_candidate("v1", source_artifacts)
+    metadata = {"model_file": "model_file"}
+    manager.register_candidate("v1", source_artifacts, metadata=metadata)
     manager.promote_model("v1", registry_config.STATE_CANDIDATE, registry_config.STATE_PRODUCTION)
     
     # Create v2 artifacts (dummy content change so hash is different if we care, but same is fine for this test)
-    manager.register_candidate("v2", source_artifacts)
+    manager.register_candidate("v2", source_artifacts, metadata=metadata)
     manager.promote_model("v2", registry_config.STATE_CANDIDATE, registry_config.STATE_PRODUCTION)
     
     assert manager.get_active_model()["version"] == "v2"
@@ -116,8 +120,9 @@ def test_rollback_production(mock_registry_env):
 
 def test_invalid_state_transitions(mock_registry_env):
     manager, registry_path, source_artifacts = mock_registry_env
+    metadata = {"model_file": "model_file"}
     
-    manager.register_candidate("v1", source_artifacts)
+    manager.register_candidate("v1", source_artifacts, metadata=metadata)
     
     # Attempt promotion to non-existent state
     with pytest.raises(InvalidStateTransitionError):

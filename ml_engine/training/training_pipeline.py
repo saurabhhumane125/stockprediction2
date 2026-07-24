@@ -591,8 +591,8 @@ class TrainingOrchestrator:
         model_path = os.path.join(self.artifact_dir, "model.pt")
         torch.save(model.state_dict(), model_path)
 
-        # scaler.pkl (copy from provided path or leave placeholder)
-        scaler_dest = os.path.join(self.artifact_dir, "scaler.pkl")
+        # feature_scaler.pkl (copy from provided path or leave placeholder)
+        scaler_dest = os.path.join(self.artifact_dir, "feature_scaler.pkl")
         if self.scaler_path and os.path.exists(self.scaler_path):
             shutil.copy2(self.scaler_path, scaler_dest)
         else:
@@ -662,7 +662,7 @@ class TrainingOrchestrator:
         logger.info(f"[TrainingOrchestrator] Artifacts exported to {self.artifact_dir}.")
         return {
             "model.pt": model_path,
-            "scaler.pkl": scaler_dest,
+            "feature_scaler.pkl": scaler_dest,
             "label_encoder.pkl": encoder_dest,
             "metadata.json": meta_path,
             "calibrator.pkl": calibrator_path if calibrator_path else encoder_dest,
@@ -678,7 +678,7 @@ class TrainingOrchestrator:
 
         candidate_artifacts: Dict[str, str] = {
             "model.pt": artifact_paths["model.pt"],
-            "scaler.pkl": artifact_paths["scaler.pkl"],
+            "feature_scaler.pkl": artifact_paths["feature_scaler.pkl"],
             "label_encoder.pkl": artifact_paths.get("label_encoder.pkl"),
             "calibrator.pkl": artifact_paths.get("calibrator.pkl", artifact_paths.get("label_encoder.pkl")),
         }
