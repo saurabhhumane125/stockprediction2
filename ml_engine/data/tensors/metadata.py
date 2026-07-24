@@ -38,10 +38,16 @@ class MetadataGenerator:
             "dataset_version": dataset_version,
             "generation_timestamp": datetime.utcnow().isoformat() + "Z",
             "sequence_length": training_config.SEQUENCE_LENGTH,
-            "forecast_horizon": training_config.FORECAST_HORIZON,
             "features": {
                 "count": len(feature_cols),
                 "order": feature_cols
+            },
+            "task_type": training_config.target.task_type.value,
+            "target_type": training_config.target.target_type,
+            "forecast_horizons": training_config.target.horizons,
+            "primary_horizon": training_config.target.primary_horizon,
+            "output_schema": {
+                "shape": [len(training_config.target.horizons)] if training_config.target.task_type.value == "MULTI_OUTPUT_REGRESSION" else [1]
             },
             "dimensions": {
                 "train_samples": train_shape[0],

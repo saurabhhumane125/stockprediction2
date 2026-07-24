@@ -18,7 +18,6 @@ class ModelConfig:
     HIDDEN_SIZE: int = 64          # hidden dimension for recurrent layers
     NUM_LAYERS: int = 2            # stacked recurrent or encoder depth
     DROPOUT: float = 0.2           # dropout applied after each recurrent block
-    OUTPUT_CLASSES: int = 2        # number of output logit classes
     BIDIRECTIONAL: bool = False    # used by BiGRU; ignored by others
     ACTIVATION: str = "relu"       # activation for classification head: "relu" | "gelu"
     NORMALIZATION: str = "layer"   # "batch" | "layer" | "none"

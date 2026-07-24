@@ -35,11 +35,15 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import numpy as np
 
 from ml_engine.config.training_config import training_config
+from ml_engine.config.model_config import model_config
+from ml_engine.core.types import TaskType
 from ml_engine.data.storage.numpy_storage import NumpyStorage
 from ml_engine.registry.manager import RegistryManager
 from ml_engine.training.checkpoint_manager import CheckpointManager
 from ml_engine.training.report_generator import ReportGenerator
 from ml_engine.training.utils import TimeSeriesDataset, seed_everything
+from ml_engine.training.loss_factory import LossFactory
+from ml_engine.training.metrics_registry import MetricsRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -271,7 +275,7 @@ class TrainingOrchestrator:
             logger.info(f"[TrainingOrchestrator] Resuming from epoch {start_epoch}.")
 
         # 8. Training loop
-        criterion = torch.nn.CrossEntropyLoss()
+        criterion = LossFactory.get_loss(self.cfg.target.task_type)
         history: List[Dict[str, float]] = []
 
         for epoch in range(start_epoch, self.cfg.EPOCHS):
@@ -322,7 +326,7 @@ class TrainingOrchestrator:
         
         # Slice class-1 probability for AUC if binary
         test_prob_auc = test_probs[:, 1] if test_probs.shape[1] == 2 else test_probs
-        clf_metrics = _compute_metrics(test_true, test_preds, test_prob_auc)
+        clf_metrics = MetricsRegistry.evaluate(self.cfg.target.task_type, test_true, test_preds, test_prob_auc)
         eval_metrics.update(clf_metrics)
         logger.info(f"[TrainingOrchestrator] Test evaluation: {eval_metrics}")
         
@@ -448,15 +452,25 @@ class TrainingOrchestrator:
 
         model.train()
         total_loss = 0.0
-        correct = 0
         total = 0
 
         for X_batch, y_batch in loader:
-            X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+            X_batch = X_batch.to(device)
+            # Support target dims like [N, 1] for regression by converting correctly
+            if self.cfg.target.task_type in (TaskType.REGRESSION, TaskType.MULTI_OUTPUT_REGRESSION):
+                y_batch = y_batch.float().to(device)
+                if self.cfg.target.task_type == TaskType.REGRESSION and y_batch.dim() > 1 and y_batch.shape[1] > 1:
+                    y_batch = y_batch[:, -1:]
+            else:
+                y_batch = y_batch.long().to(device)
+
             optimizer.zero_grad()
 
             with torch.cuda.amp.autocast(enabled=self.cfg.MIXED_PRECISION):
                 logits = model(X_batch)
+                if self.cfg.target.task_type in (TaskType.BINARY_CLASSIFICATION, TaskType.REGRESSION, TaskType.MULTI_OUTPUT_REGRESSION):
+                    # Flatten both to match sizes if needed (e.g. [N, 1] -> [N])
+                    logits = logits.view_as(y_batch)
                 loss = criterion(logits, y_batch)
 
             scaler.scale(loss).backward()
@@ -469,13 +483,10 @@ class TrainingOrchestrator:
             scaler.update()
 
             total_loss += loss.item() * len(y_batch)
-            preds = logits.argmax(dim=1)
-            correct += (preds == y_batch).sum().item()
             total += len(y_batch)
 
         return {
-            "train_loss": total_loss / total,
-            "train_accuracy": correct / total,
+            "train_loss": total_loss / total if total > 0 else 0.0,
         }
 
     def _eval_epoch(
@@ -485,23 +496,62 @@ class TrainingOrchestrator:
 
         model.eval()
         total_loss = 0.0
-        correct = 0
         total = 0
+        
+        all_preds, all_true, all_probs = [], [], []
 
         with torch.no_grad():
             for X_batch, y_batch in loader:
-                X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+                X_batch = X_batch.to(device)
+                if self.cfg.target.task_type in (TaskType.REGRESSION, TaskType.MULTI_OUTPUT_REGRESSION):
+                    y_batch = y_batch.float().to(device)
+                    if self.cfg.target.task_type == TaskType.REGRESSION and y_batch.dim() > 1 and y_batch.shape[1] > 1:
+                        y_batch = y_batch[:, -1:]
+                else:
+                    y_batch = y_batch.long().to(device)
+                    
                 logits = model(X_batch)
+                if self.cfg.target.task_type in (TaskType.BINARY_CLASSIFICATION, TaskType.REGRESSION, TaskType.MULTI_OUTPUT_REGRESSION):
+                    logits = logits.view_as(y_batch)
+                    
                 loss = criterion(logits, y_batch)
                 total_loss += loss.item() * len(y_batch)
-                preds = logits.argmax(dim=1)
-                correct += (preds == y_batch).sum().item()
                 total += len(y_batch)
+                
+                # For metrics calculation
+                if self.cfg.target.task_type == TaskType.BINARY_CLASSIFICATION:
+                    probs = torch.sigmoid(logits)
+                    preds = (probs > 0.5).int()
+                elif self.cfg.target.task_type == TaskType.MULTICLASS_CLASSIFICATION:
+                    import torch.nn.functional as F
+                    probs = F.softmax(logits, dim=1)
+                    preds = logits.argmax(dim=1)
+                else:
+                    probs = logits
+                    preds = logits
+                    
+                all_probs.append(probs.cpu().numpy())
+                all_preds.append(preds.cpu().numpy())
+                all_true.append(y_batch.cpu().numpy())
 
-        return {
+        metrics = {
             f"{prefix}_loss": total_loss / max(total, 1),
-            f"{prefix}_accuracy": correct / max(total, 1),
         }
+        
+        try:
+            val_true = np.concatenate(all_true)
+            val_preds = np.concatenate(all_preds)
+            val_probs = np.concatenate(all_probs)
+            
+            # Slice class-1 probability for AUC if binary
+            val_prob_auc = val_probs[:, 1] if len(val_probs.shape) > 1 and val_probs.shape[1] == 2 else val_probs
+            
+            clf_metrics = MetricsRegistry.evaluate(self.cfg.target.task_type, val_true, val_preds, val_prob_auc)
+            metrics.update({f"{prefix}_{k}": v for k, v in clf_metrics.items()})
+        except Exception as e:
+            logger.warning(f"Could not compute batch metrics for {prefix}: {e}")
+
+        return metrics
 
     def _collect_predictions(
         self, model, loader, device
@@ -515,8 +565,16 @@ class TrainingOrchestrator:
             for X_batch, y_batch in loader:
                 X_batch = X_batch.to(device)
                 logits = model(X_batch)
-                probs = F.softmax(logits, dim=1).cpu().numpy()
-                preds = logits.argmax(dim=1).cpu().numpy()
+                if self.cfg.target.task_type == TaskType.MULTICLASS_CLASSIFICATION:
+                    probs = F.softmax(logits, dim=1).cpu().numpy()
+                    preds = logits.argmax(dim=1).cpu().numpy()
+                elif self.cfg.target.task_type == TaskType.BINARY_CLASSIFICATION:
+                    probs = torch.sigmoid(logits).cpu().numpy()
+                    preds = (probs > 0.5).int().cpu().numpy()
+                else:
+                    probs = logits.cpu().numpy()
+                    preds = probs
+                    
                 all_logits.append(logits.cpu().numpy())
                 all_preds.append(preds)
                 all_probs.append(probs)
@@ -570,14 +628,48 @@ class TrainingOrchestrator:
                 pickle.dump(None, f)
 
         # metadata.json
+        # Output dimension calculation
+        target_cfg = self.cfg.target
+        task_type = target_cfg.task_type
+        if task_type == TaskType.BINARY_CLASSIFICATION:
+            out_dim = 1
+        elif task_type == TaskType.MULTICLASS_CLASSIFICATION:
+            out_dim = len(target_cfg.thresholds) + 1 if target_cfg.thresholds else 3
+        elif task_type == TaskType.REGRESSION:
+            out_dim = 1
+        elif task_type == TaskType.MULTI_OUTPUT_REGRESSION:
+            out_dim = len(target_cfg.horizons)
+        else:
+            out_dim = 1
+
         metadata = {
             "version": self.version,
             "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+            "framework": "pytorch",
+            "model_file": "model.pt",
+            "task_type": task_type.value,
+            "target_type": target_cfg.target_type,
+            "forecast_horizons": target_cfg.horizons,
+            "model_type": model_config.MODEL_TYPE,
+            "input_size": len(self.feature_names),
+            "hidden_size": model_config.HIDDEN_SIZE,
+            "num_layers": model_config.NUM_LAYERS,
+            "dropout": model_config.DROPOUT,
+            "bidirectional": model_config.BIDIRECTIONAL,
+            "output_dimension": out_dim,
+            "feature_order": self.feature_names,
+            "feature_count": len(self.feature_names),
+            "decoder": "PredictionDecoder",
+            "loss": "LossFactory_dynamic",
+            "metrics": "MetricsRegistry_dynamic",
+            "dataset_version": self.data_path,
+            "model_version": self.version,
             "evaluation_metrics": {
                 k: round(float(v), 6) if isinstance(v, (int, float)) or (isinstance(v, str) and v.replace('.','',1).isdigit()) else v 
                 for k, v in eval_metrics.items()
             },
             "training_config": self.cfg.to_dict(),
+            "model_config": model_config.to_dict(),
             "feature_names": self.feature_names,
             "tickers": self.tickers,
             "execution_time_seconds": round(execution_time, 2),
@@ -593,44 +685,33 @@ class TrainingOrchestrator:
             "label_encoder.pkl": encoder_dest,
             "metadata.json": meta_path,
             "calibrator.pkl": calibrator_path if calibrator_path else encoder_dest,
+            "metadata_dict": metadata
         }
 
     def _register(self, artifact_paths: Dict[str, str]) -> None:
         """
         Register the artifact bundle in the RegistryManager as a 'candidate'.
-        Maps local artifact names to the registry's REQUIRED_ARTIFACTS naming
-        convention while preserving backward compatibility with the legacy registry.
+        Passes the full PyTorch metadata payload so the registry becomes framework-aware.
         """
         from ml_engine.config.registry_config import registry_config
 
-        # The registry expects these specific keys.  Map our PyTorch artifacts
-        # to whatever the registry requires without modifying registry_config.
-        # We write shim files for legacy keys so the registry validator passes.
-        candidate_artifacts: Dict[str, str] = {}
-
-        for required in registry_config.REQUIRED_ARTIFACTS:
-            if required == "best_model.keras":
-                # Point to our model.pt (registry hashes the file; format is noted in metadata)
-                candidate_artifacts[required] = artifact_paths["model.pt"]
-            elif required == "feature_scaler.pkl":
-                candidate_artifacts[required] = artifact_paths["scaler.pkl"]
-            elif required == "calibrator.pkl":
-                candidate_artifacts[required] = artifact_paths.get("calibrator.pkl", artifact_paths["label_encoder.pkl"])
-            elif required == "evaluation_report.json":
-                candidate_artifacts[required] = artifact_paths["metadata.json"]
-            elif required == "calibration_report.json":
-                # Write an empty placeholder calibration report
-                calib_path = os.path.join(self.artifact_dir, "calibration_report.json")
-                with open(calib_path, "w") as f:
-                    json.dump({"version": self.version, "calibrated": False}, f)
-                candidate_artifacts[required] = calib_path
-            else:
-                logger.warning(f"[TrainingOrchestrator] Unknown required artifact: {required}")
+        candidate_artifacts: Dict[str, str] = {
+            "model.pt": artifact_paths["model.pt"],
+            "scaler.pkl": artifact_paths["scaler.pkl"],
+            "label_encoder.pkl": artifact_paths.get("label_encoder.pkl"),
+            "calibrator.pkl": artifact_paths.get("calibrator.pkl", artifact_paths.get("label_encoder.pkl")),
+        }
+        
+        # Filter out None values
+        candidate_artifacts = {k: v for k, v in candidate_artifacts.items() if v is not None}
+        
+        metadata = artifact_paths["metadata_dict"]
 
         try:
             manifest = self.registry.register_candidate(
                 version=self.version,
                 source_artifacts=candidate_artifacts,
+                metadata=metadata,
                 authenticity="REAL",
             )
             logger.info(

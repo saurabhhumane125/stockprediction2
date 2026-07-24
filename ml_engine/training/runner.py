@@ -171,11 +171,10 @@ class ProductionTrainingRunner:
         logger.info(f"[Runner] Exporting candidate artifacts to {art_dir}")
         
         candidate_artifacts = {
-            "best_model.keras": os.path.join(art_dir, "model.pt"),
-            "feature_scaler.pkl": os.path.join(art_dir, "scaler.pkl"),
-            "calibrator.pkl": os.path.join(art_dir, "label_encoder.pkl"),
-            "evaluation_report.json": os.path.join(art_dir, "metadata.json"),
-            "calibration_report.json": os.path.join(art_dir, "metadata.json") # dummy
+            "model.pt": os.path.join(art_dir, "model.pt"),
+            "scaler.pkl": os.path.join(art_dir, "scaler.pkl"),
+            "label_encoder.pkl": os.path.join(art_dir, "label_encoder.pkl"),
+            "metadata.json": os.path.join(art_dir, "metadata.json")
         }
         
         manifest = self.registry.register_candidate(

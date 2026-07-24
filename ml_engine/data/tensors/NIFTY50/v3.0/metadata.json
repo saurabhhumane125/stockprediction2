@@ -1,0 +1,68 @@
+{
+    "dataset_version": "NIFTY50/v3.0",
+    "generation_timestamp": "2026-07-23T11:40:00.147009Z",
+    "sequence_length": 48,
+    "features": {
+        "count": 34,
+        "order": [
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "dividends",
+            "stock_splits",
+            "daily_return",
+            "ema_short",
+            "ema_long",
+            "rsi",
+            "macd_line",
+            "macd_signal",
+            "macd_histogram",
+            "bb_upper",
+            "bb_lower",
+            "bb_width",
+            "atr",
+            "adx",
+            "roc",
+            "momentum",
+            "volatility",
+            "volume_change",
+            "rolling_return_5",
+            "rolling_return_10",
+            "rolling_volatility_5",
+            "rolling_volatility_10",
+            "obv",
+            "cmf",
+            "rolling_vwap_20",
+            "nifty_return",
+            "nifty_ema20",
+            "nifty_rsi14",
+            "india_vix_close"
+        ]
+    },
+    "task_type": "REGRESSION",
+    "target_type": "RETURN",
+    "forecast_horizons": [
+        5
+    ],
+    "primary_horizon": 5,
+    "output_schema": {
+        "shape": [
+            1
+        ]
+    },
+    "dimensions": {
+        "train_samples": 76490,
+        "val_samples": 15778,
+        "test_samples": 9393
+    },
+    "statistics": {
+        "target_distribution_train": {}
+    },
+    "configuration_hash": "0dc3f79949f695b2d891e5c2138bfe8b1dad3ae92c9f06fb4cd88455f37623be",
+    "preprocessing": {
+        "scaler_type": "StandardScaler",
+        "scaler_checksum": "e5e9fc5fb3cbe9145f16f5d5e74a7c8a5ea16df9a107358c51ff8b4ccdd5c0be"
+    }
+}

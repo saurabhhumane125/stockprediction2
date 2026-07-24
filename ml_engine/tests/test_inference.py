@@ -28,7 +28,7 @@ def mock_inference_env():
         os.makedirs(source_dir)
         
         # 1. Create Mock Keras Model
-        input_layer = tf.keras.layers.InputLayer(input_shape=(training_config.SEQUENCE_LENGTH, inference_config.EXPECTED_FEATURES))
+        input_layer = tf.keras.layers.InputLayer(input_shape=(training_config.SEQUENCE_LENGTH, 20))
         flatten = tf.keras.layers.Flatten()
         output_layer = tf.keras.layers.Dense(1, activation='sigmoid')
         
@@ -43,6 +43,13 @@ def mock_inference_env():
         calibrator_path = os.path.join(source_dir, "calibrator.pkl")
         joblib.dump(platt, calibrator_path)
         
+        # 2b. Create Mock Scaler
+        from sklearn.preprocessing import StandardScaler
+        scaler = StandardScaler()
+        scaler.fit(np.random.rand(100, 20))
+        scaler_path = os.path.join(source_dir, "feature_scaler.pkl")
+        joblib.dump(scaler, scaler_path)
+
         # 3. Create dummy reports
         eval_report_path = os.path.join(source_dir, "evaluation_report.json")
         calib_report_path = os.path.join(source_dir, "calibration_report.json")
@@ -54,12 +61,13 @@ def mock_inference_env():
         source_artifacts = {
             "best_model.keras": model_path,
             "calibrator.pkl": calibrator_path,
+            "feature_scaler.pkl": scaler_path,
             "evaluation_report.json": eval_report_path,
             "calibration_report.json": calib_report_path
         }
         
         # Register and Promote to Production
-        manager.register_candidate("v1", source_artifacts)
+        manager.register_candidate("v1", source_artifacts, metadata={"model_file": "best_model.keras", "framework": "tensorflow"})
         manager.promote_model("v1", registry_config.STATE_CANDIDATE, registry_config.STATE_PRODUCTION)
         
         yield manager
@@ -71,15 +79,15 @@ def test_production_inference_successful_predict(mock_inference_env):
     
     # Needs to be at least SEQUENCE_LENGTH rows
     seq_len = training_config.SEQUENCE_LENGTH
-    num_features = inference_config.EXPECTED_FEATURES
+    num_features = 20
     
     mock_input = np.random.rand(seq_len + 5, num_features).astype(np.float32)
     
     results = engine.predict(mock_input)
     
-    assert len(results) == 5  # (seq_len + 5) - seq_len = 5 (due to range boundary in _create_windows)
-    assert "Predicted Class" in results[0]
-    assert "Calibrated Probability" in results[0]
+    assert len(results) == 6  # (seq_len + 5) - seq_len + 1 = 6
+    assert "predicted_class" in results[0]
+    assert "probability" in results[0]
     assert results[0]["Model Version"] == "v1"
 
 
@@ -88,12 +96,12 @@ def test_inference_invalid_shapes(mock_inference_env):
     engine = ProductionInferenceEngine(registry_manager=manager)
     
     # 1. Invalid features
-    invalid_features = np.random.rand(10, inference_config.EXPECTED_FEATURES + 1).astype(np.float32)
+    invalid_features = np.random.rand(10, 20 + 1).astype(np.float32)
     with pytest.raises(InferenceInputError, match="Expected"):
         engine.predict(invalid_features)
         
     # 2. Too short sequence
-    short_seq = np.random.rand(training_config.SEQUENCE_LENGTH - 1, inference_config.EXPECTED_FEATURES).astype(np.float32)
+    short_seq = np.random.rand(training_config.SEQUENCE_LENGTH - 1, 20).astype(np.float32)
     with pytest.raises(InferenceInputError, match="Insufficient data"):
         engine.predict(short_seq)
         

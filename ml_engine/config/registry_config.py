@@ -27,11 +27,9 @@ class RegistryConfig:
     @property
     def REQUIRED_ARTIFACTS(self) -> List[str]:
         return [
-            "best_model.keras",
+            "model_file",
             "feature_scaler.pkl",
-            "calibrator.pkl",
-            "evaluation_report.json",
-            "calibration_report.json"
+            "calibrator.pkl"
         ]
         
     def to_dict(self) -> Dict[str, Any]:

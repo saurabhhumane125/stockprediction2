@@ -1,6 +1,5 @@
 from typing import Dict, Any, List, Literal
-
-
+from ml_engine.core.types import TaskType
 class TrainingConfig:
     """
     Unified configuration for dataset building, splitting, and training loops.
@@ -10,9 +9,17 @@ class TrainingConfig:
 
     # ── Dataset ─────────────────────────────────────────────────────────────────
     SEQUENCE_LENGTH: int = 48
-    FORECAST_HORIZON: int = 1
+    
+    # ── Target Configuration ────────────────────────────────────────────────────
+    class target:
+        task_type: TaskType = TaskType.REGRESSION
+        target_type: str = "RETURN" # LOG_RETURN, RETURN, PRICE, CLASS
+        horizons: List[int] = [5]
+        primary_horizon: int = 5
+        thresholds: List[float] = [0.0]
 
-    # Target definition (0 bps = strictly positive return = BUY)
+    # Legacy attributes for backward compatibility
+    FORECAST_HORIZON: int = 5
     RETURN_THRESHOLD_BPS: float = 0.0
 
     # Temporal splitting (inclusive end dates)

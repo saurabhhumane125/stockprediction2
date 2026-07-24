@@ -9,12 +9,14 @@ import glob
 import logging
 import pandas as pd
 import numpy as np
-from typing import List
+from typing import List, Tuple
 import joblib
 import hashlib
 from sklearn.preprocessing import StandardScaler
 
-from ml_engine.data.tensors.utils import add_target_column
+from ml_engine.data.tensors.target_factory import TargetFactory
+from ml_engine.core.types import TaskType
+from ml_engine.config.training_config import TrainingConfig
 from ml_engine.data.tensors.window_generator import WindowGenerator
 from ml_engine.data.tensors.splitter import ChronologicalSplitter
 from ml_engine.data.tensors.validator import TensorValidator
@@ -75,15 +77,18 @@ class TensorBuilder:
             df = pd.read_parquet(p_file)
             
             # 1. Add Target
-            df = add_target_column(df)
+            df = TargetFactory.generate(df, TrainingConfig.target)
+            
+            # Find all target columns (could be "target", "target_3", "return_5d" etc.)
+            target_cols = [c for c in df.columns if c == "target" or c.startswith("target_") or c.startswith("return_")]
             
             if feature_cols is None:
-                # Use all columns except ticker and target (and index which is usually Date)
-                exclude = {"ticker", "target"}
+                # Use all columns except ticker and targets (and index which is usually Date)
+                exclude = {"ticker"}.union(set(target_cols))
                 feature_cols = [c for c in df.columns if c not in exclude]
                 
             train_df, val_df, test_df = ChronologicalSplitter.split_by_date(df)
-            processed_data.append((ticker, df, train_df, val_df, test_df))
+            processed_data.append((ticker, df, train_df, val_df, test_df, target_cols))
             
         # Fit Global StandardScaler on all train data
         logger.info("[TensorBuilder] Fitting Global StandardScaler on combined training data...")
@@ -107,12 +112,34 @@ class TensorBuilder:
         }
         
         # --- PASS 2: Apply Scaler and Generate Sequences ---
-        for ticker, df, train_df, val_df, test_df in processed_data:
+        for ticker, df, train_df, val_df, test_df, target_cols in processed_data:
             logger.info(f"[TensorBuilder] Pass 2 (Sequence Generation): {ticker}")
             
             # Apply Scaling
             df_scaled = df.copy()
             df_scaled[feature_cols] = scaler.transform(df[feature_cols])
+            
+            def build_windows(data_df: pd.DataFrame, is_val_or_test=False) -> Tuple[np.ndarray, np.ndarray]:
+                if len(data_df) == 0:
+                    return np.array([]), np.array([])
+                    
+                X_list, y_list = [], []
+                seq_len = training_config.SEQUENCE_LENGTH
+                
+                # Convert to numpy for speed
+                X_mat = data_df[feature_cols].values
+                y_mat = data_df[target_cols].values
+                
+                start_idx = seq_len if is_val_or_test else 0
+                for i in range(start_idx, len(data_df) - seq_len + 1):
+                    X_list.append(X_mat[i : i + seq_len])
+                    # Ensure y is always 1D per sample if single target, or 1D array if multi-target
+                    y_val = y_mat[i + seq_len - 1]
+                    if len(target_cols) == 1:
+                        y_val = y_val[0]
+                    y_list.append(y_val)
+                    
+                return np.array(X_list), np.array(y_list)
             
             # Re-split chronologically from the scaled dataframe
             train_df, val_df, test_df = ChronologicalSplitter.split_by_date(df_scaled)
@@ -128,9 +155,9 @@ class TensorBuilder:
                 test_df = pd.concat([history, test_df])
             
             # 3. Window
-            Xt, yt = WindowGenerator.generate(train_df, feature_cols)
-            Xv, yv = WindowGenerator.generate(val_df, feature_cols)
-            Xts, yts = WindowGenerator.generate(test_df, feature_cols)
+            Xt, yt = build_windows(train_df, is_val_or_test=False)
+            Xv, yv = build_windows(val_df, is_val_or_test=True)
+            Xts, yts = build_windows(test_df, is_val_or_test=True)
             
             if len(Xt) > 0: X_train_list.append(Xt); y_train_list.append(yt)
             if len(Xv) > 0: X_val_list.append(Xv); y_val_list.append(yv)
@@ -149,19 +176,21 @@ class TensorBuilder:
         
         # 4. Validate
         logger.info("[TensorBuilder] Validating tensors...")
-        valid = TensorValidator.validate(X_train, y_train, len(feature_cols), training_config.SEQUENCE_LENGTH)
-        valid = valid and (len(X_val) == 0 or TensorValidator.validate(X_val, y_val, len(feature_cols), training_config.SEQUENCE_LENGTH))
-        valid = valid and (len(X_test) == 0 or TensorValidator.validate(X_test, y_test, len(feature_cols), training_config.SEQUENCE_LENGTH))
+        task_type = getattr(training_config.target, "task_type", TaskType.BINARY_CLASSIFICATION)
+        valid = TensorValidator.validate(X_train, y_train, len(feature_cols), training_config.SEQUENCE_LENGTH, task_type)
+        valid = valid and (len(X_val) == 0 or TensorValidator.validate(X_val, y_val, len(feature_cols), training_config.SEQUENCE_LENGTH, task_type))
+        valid = valid and (len(X_test) == 0 or TensorValidator.validate(X_test, y_test, len(feature_cols), training_config.SEQUENCE_LENGTH, task_type))
         
         if not valid:
             logger.error("[TensorBuilder] Tensor validation failed. Aborting serialization.")
             raise ValueError("Tensor validation failed.")
             
         # 5. Metadata
-        target_dist = {
-            "0": int(np.sum(y_train == 0)),
-            "1": int(np.sum(y_train == 1))
-        } if len(y_train) > 0 else {}
+        target_dist = {}
+        if len(y_train) > 0 and len(y_train.shape) == 1 and y_train.dtype in (int, np.int32, np.int64):
+            # Only calculate distribution for classification (1D integer targets)
+            unique, counts = np.unique(y_train, return_counts=True)
+            target_dist = {str(k): int(v) for k, v in zip(unique, counts)}
         
         meta = MetadataGenerator.generate(
             dataset_version,

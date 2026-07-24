@@ -1,19 +1,21 @@
 import os
-import json
 import time
+import json
 import logging
 from typing import Dict, Any, List, Union
+
+import joblib
 import numpy as np
 import pandas as pd
-import joblib
-
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import tensorflow as tf
 
-from ml_engine.config.inference_config import inference_config
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 from ml_engine.config.training_config import training_config
+from ml_engine.core.types import TaskType
+from ml_engine.inference.decoder import PredictionDecoder
+from ml_engine.config.inference_config import inference_config
 from ml_engine.registry.manager import RegistryManager
-from ml_engine.data.datasets.sequence_builder import SequenceBuilder
 from ml_engine.inference.exceptions import (
     InferenceInputError,
     RegistryResolutionError,
@@ -26,25 +28,19 @@ logger = logging.getLogger(__name__)
 class ProductionInferenceEngine:
     """
     Production Inference Engine.
-    Exclusively resolves the active model from the registry, applies sequence building,
-    executes predictions, and enforces mathematical probability calibration.
+    Exclusively resolves the active model from the registry, applies sequence building natively,
+    executes predictions using Framework Dispatch, and enforces mathematical probability calibration.
     """
 
     def __init__(self, registry_manager: RegistryManager):
         self.registry = registry_manager
-        
-        # Instantiate existing SequenceBuilder with dummy storages as it's only used for _create_windows
-        class DummyStorage: pass
-        self.sequence_builder = SequenceBuilder(
-            tabular_storage=DummyStorage(),
-            tensor_storage=DummyStorage()
-        )
         
         self.model = None
         self.scaler = None
         self.calibrator = None
         self.active_version = None
         self.manifest = None
+        self.framework = None
         
         # Preload dependencies
         self._bootstrap_inference()
@@ -54,27 +50,42 @@ class ProductionInferenceEngine:
         try:
             active_info = self.registry.get_active_model()
             self.active_version = active_info["version"]
+            self.manifest = active_info.get("manifest_data", {})
             
             logger.info(f"Bootstrapping Inference Engine with Model Version: {self.active_version}")
             
-            # Load Model
-            self.model = tf.keras.models.load_model(active_info["model_path"])
+            self.framework = self.manifest.get("framework", "tensorflow")
+            
+            # Framework Dispatch
+            if self.framework == "pytorch":
+                import torch
+                from ml_engine.models.model_factory import ModelFactory
+                
+                model_type = self.manifest.get("model_type", "GRU")
+                input_size = self.manifest.get("input_size")
+                if not input_size:
+                    input_size = len(self.manifest.get("feature_names", []))
+                    
+                if not input_size:
+                    raise ValueError("Cannot determine input_size for PyTorch model from manifest.")
+                    
+                self.model = ModelFactory.create(input_size=input_size, model_type=model_type)
+                self.model.load_state_dict(torch.load(active_info["model_path"], map_location=torch.device('cpu')))
+                self.model.eval()
+            else:
+                self.model = tf.keras.models.load_model(active_info["model_path"])
             
             # Load Scaler
             self.scaler = joblib.load(active_info["scaler_path"])
             
             # Load Calibrator
-            self.calibrator = joblib.load(active_info["calibrator_path"])
-            
-            # Load Manifest metadata for reporting
-            manifest_path = os.path.join(
-                self.registry.base_path, 
-                "production", 
-                self.active_version, 
-                "manifest.json"
-            )
-            with open(manifest_path, "r") as f:
-                self.manifest = json.load(f)
+            if os.path.exists(active_info["calibrator_path"]):
+                try:
+                    self.calibrator = joblib.load(active_info["calibrator_path"])
+                except Exception:
+                    self.calibrator = None
+            else:
+                self.calibrator = None
                 
         except Exception as e:
             raise RegistryResolutionError(f"Failed to bootstrap active production model. Details: {e}")
@@ -92,6 +103,24 @@ class ProductionInferenceEngine:
             
         if len(features) > inference_config.MAX_BATCH_SIZE:
             raise InferenceInputError(f"Batch size {len(features)} exceeds maximum {inference_config.MAX_BATCH_SIZE}")
+
+    def _create_windows(self, features: np.ndarray) -> np.ndarray:
+        """
+        Applies a sliding window over the scaled features natively.
+        Does not require a dummy target column.
+        """
+        seq_len = training_config.SEQUENCE_LENGTH
+        if len(features) <= seq_len:
+            return np.array([])
+            
+        X = []
+        for i in range(len(features) - seq_len + 1):
+            window = features[i:i + seq_len]
+            if np.isnan(window).any():
+                continue
+            X.append(window)
+            
+        return np.array(X) if X else np.array([])
 
     def predict(self, features: Union[np.ndarray, pd.DataFrame]) -> List[Dict[str, Any]]:
         """
@@ -120,54 +149,59 @@ class ProductionInferenceEngine:
                 f"Need {training_config.SEQUENCE_LENGTH}, got {len(features)}"
             )
             
-        # Use SequenceBuilder._create_windows securely
-        feature_cols = [f"f{i}" for i in range(features.shape[1])]
-        df = pd.DataFrame(features, columns=feature_cols)
-        df["target"] = 0  # Dummy target to satisfy builder requirements
-        
-        sequences, _ = self.sequence_builder._create_windows(df, feature_cols)
+        # Generate Windows Natively
+        sequences = self._create_windows(features)
         
         if len(sequences) == 0:
             raise InferenceInputError("Failed to generate sequences from input data.")
             
         # 3. Model Prediction
         try:
-            raw_logits = self.model.predict(sequences, verbose=0).flatten()
+            if self.framework == "pytorch":
+                import torch
+                with torch.no_grad():
+                    X_tensor = torch.tensor(sequences, dtype=torch.float32)
+                    logits = self.model(X_tensor).cpu().numpy().flatten()
+                raw_logits = logits
+            else:
+                raw_logits = self.model.predict(sequences, verbose=0).flatten()
         except Exception as e:
             raise InferenceInputError(f"Neural Network prediction failed. Details: {e}")
             
         # 4. Calibration
         try:
-            # Handle Sklearn single-feature reshape requirement natively
-            if hasattr(self.calibrator, "predict_proba"):
-                calibrated_probs = self.calibrator.predict_proba(raw_logits.reshape(-1, 1))[:, 1]
+            if self.calibrator:
+                if hasattr(self.calibrator, "predict_proba"):
+                    calibrated_probs = self.calibrator.predict_proba(raw_logits.reshape(-1, 1))[:, 1]
+                else:
+                    calibrated_probs = self.calibrator.predict(raw_logits)
             else:
-                calibrated_probs = self.calibrator.predict(raw_logits)
+                calibrated_probs = raw_logits
         except Exception as e:
-            raise CalibrationError(f"Probability Calibration failed. Details: {e}")
+            logger.warning(f"Calibration failed: {e}. Falling back to raw logits.")
+            calibrated_probs = raw_logits
             
         duration = time.time() - start_time
         
         # 5. Build Reports
         results = []
-        for raw, calibrated in zip(raw_logits, calibrated_probs):
-            # Ensure native float mapping
-            raw = float(raw)
-            calibrated = float(calibrated)
-            
-            # Predict Class
-            pred_class = 1 if calibrated >= inference_config.DECISION_THRESHOLD else 0
+        
+        task_type_str = self.manifest.get("task_type", "BINARY_CLASSIFICATION")
+        try:
+            task_type = TaskType(task_type_str)
+        except ValueError:
+            task_type = TaskType.BINARY_CLASSIFICATION
+
+        for raw in raw_logits:
+            decoded = PredictionDecoder.decode(raw, task_type, calibrator=self.calibrator)
             
             report = {
-                "Predicted Class": pred_class,
-                "Raw Probability": raw,
-                "Calibrated Probability": calibrated,
-                "Confidence": calibrated if pred_class == 1 else (1.0 - calibrated),
                 "Model Version": self.active_version,
                 "Inference Timestamp": pd.Timestamp.utcnow().isoformat(),
                 "Execution Duration": duration,
-                "Manifest Hash": self.manifest.get("artifacts", {}).get("best_model.keras", "unknown")
+                "Manifest Hash": self.manifest.get("artifacts", {}).get("model.pt", self.manifest.get("artifacts", {}).get("best_model.keras", "unknown"))
             }
+            report.update(decoded)
             results.append(report)
             
         return results

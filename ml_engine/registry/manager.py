@@ -61,7 +61,7 @@ class RegistryManager:
                 
         return True
 
-    def register_candidate(self, version: str, source_artifacts: Dict[str, str], authenticity: str = "REAL") -> Dict[str, Any]:
+    def register_candidate(self, version: str, source_artifacts: Dict[str, str], metadata: Dict[str, Any] = None, authenticity: str = "REAL") -> Dict[str, Any]:
         """
         Registers a new model version into the Candidate state.
         Calculates hashes and generates a manifest.
@@ -71,12 +71,19 @@ class RegistryManager:
         if os.path.exists(candidate_path):
             raise VersionConflictError(f"Model version {version} already exists in candidate state.")
             
+        if not metadata:
+            metadata = {}
+            
         # Verify required artifacts are present in source
         for req in registry_config.REQUIRED_ARTIFACTS:
-            if req not in source_artifacts:
-                raise MissingArtifactError(f"Artifact {req} must be provided for registration.")
-            if not os.path.exists(source_artifacts[req]):
-                raise MissingArtifactError(f"Physical file for {req} not found at {source_artifacts[req]}")
+            actual_req = metadata.get("model_file") if req == "model_file" else req
+            if not actual_req:
+                raise MissingArtifactError("metadata['model_file'] must be provided if 'model_file' is in REQUIRED_ARTIFACTS.")
+                
+            if actual_req not in source_artifacts:
+                raise MissingArtifactError(f"Artifact {actual_req} must be provided for registration.")
+            if not os.path.exists(source_artifacts[actual_req]):
+                raise MissingArtifactError(f"Physical file for {actual_req} not found at {source_artifacts[actual_req]}")
                 
         os.makedirs(candidate_path)
         
@@ -84,12 +91,13 @@ class RegistryManager:
             raise ValueError(f"Invalid authenticity {authenticity}")
             
         # Copy and Hash
-        manifest = {
+        manifest = metadata.copy()  # Embed full model contract
+        manifest.update({
             "model_version": version,
             "authenticity": authenticity,
             "registration_timestamp": pd.Timestamp.utcnow().isoformat(),
             "artifacts": {}
-        }
+        })
         
         for name, src_path in source_artifacts.items():
             dest_path = os.path.join(candidate_path, name)
@@ -214,11 +222,14 @@ class RegistryManager:
             import logging
             logger = logging.getLogger(__name__)
             logger.warning(f"REGISTRY WARNING: Bootstrapping model version {active_version} with authenticity: {authenticity}. This is not a native production-trained artifact.")
+            
+        model_filename = manifest.get("model_file", "best_model.keras")
 
         return {
-            "model_path": os.path.join(prod_dir, "best_model.keras"),
+            "model_path": os.path.join(prod_dir, model_filename),
             "scaler_path": os.path.join(prod_dir, "feature_scaler.pkl"),
             "calibrator_path": os.path.join(prod_dir, "calibrator.pkl"),
             "version": active_version,
-            "authenticity": authenticity
+            "authenticity": authenticity,
+            "manifest_data": manifest
         }

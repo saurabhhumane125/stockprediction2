@@ -35,6 +35,8 @@ import logging
 from typing import Any, Callable, Dict, Optional, Tuple, Type
 
 from ml_engine.config.model_config import model_config
+from ml_engine.config.training_config import TrainingConfig
+from ml_engine.core.types import TaskType
 from ml_engine.models.base_model import BaseTimeSeriesClassifier
 
 logger = logging.getLogger(__name__)
@@ -164,12 +166,28 @@ class ModelFactory:
         """
         cfg = model_config
 
+        # Infer output dimension dynamically from TaskType
+        target_cfg = TrainingConfig.target
+        task_type = target_cfg.task_type
+        
+        if task_type == TaskType.BINARY_CLASSIFICATION:
+            inferred_output_classes = 1
+        elif task_type == TaskType.MULTICLASS_CLASSIFICATION:
+            # Assumes 3-class (BUY/HOLD/SELL) natively, but configurable
+            inferred_output_classes = len(target_cfg.thresholds) + 1 if target_cfg.thresholds else 3
+        elif task_type == TaskType.REGRESSION:
+            inferred_output_classes = 1
+        elif task_type == TaskType.MULTI_OUTPUT_REGRESSION:
+            inferred_output_classes = len(target_cfg.horizons)
+        else:
+            inferred_output_classes = 1
+
         # Common kwargs shared by all recurrent models
         common = {
             "input_size": input_size,
             "hidden_size": cfg.HIDDEN_SIZE,
             "num_layers": cfg.NUM_LAYERS,
-            "output_classes": cfg.OUTPUT_CLASSES,
+            "output_classes": inferred_output_classes,
             "dropout": cfg.DROPOUT,
             "normalization": cfg.NORMALIZATION,
             "weight_init": cfg.WEIGHT_INIT,
@@ -182,7 +200,7 @@ class ModelFactory:
                 "num_heads": cfg.TRANSFORMER_HEADS,
                 "ff_dim": cfg.TRANSFORMER_FF_DIM,
                 "num_layers": cfg.TRANSFORMER_DEPTH,
-                "output_classes": cfg.OUTPUT_CLASSES,
+                "output_classes": inferred_output_classes,
                 "dropout": cfg.DROPOUT,
                 "weight_init": cfg.WEIGHT_INIT,
             }
