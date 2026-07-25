@@ -699,6 +699,14 @@ class TrainingOrchestrator:
                 f"[TrainingOrchestrator] Registered version '{self.version}' as candidate. "
                 f"Manifest: {manifest.get('model_version')}"
             )
+            
+            # Generate the deployment bundle immediately after successful registration
+            try:
+                from ml_engine.colab.artifact_sync import ArtifactSynchronizer
+                ArtifactSynchronizer.export_registry_bundle(self.version)
+            except Exception as e:
+                logger.error(f"[TrainingOrchestrator] Failed to export deployment bundle: {e}")
+                
         except Exception as e:
             logger.warning(
                 f"[TrainingOrchestrator] Registry registration skipped: {e}. "
