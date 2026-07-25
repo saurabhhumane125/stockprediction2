@@ -1,5 +1,7 @@
 from sqlalchemy.orm import Session
 
+from app.core.logger import logger
+
 from app.services.market_regime_service import (
     market_regime_service,
 )
@@ -66,11 +68,13 @@ class LivePredictionService:
             raise RuntimeError("Live prediction failed to produce latest_features.")
 
         if sync_news:
-
-            news_service.sync_news(
-                db=db,
-                symbol=stock,
-            )
+            try:
+                news_service.sync_news(
+                    db=db,
+                    symbol=stock,
+                )
+            except Exception as e:
+                logger.exception("Failed to sync news for %s", stock)
 
         latest_news = (
 
@@ -90,56 +94,50 @@ class LivePredictionService:
 
         )
 
+        result = None
         if latest_news:
-
             sentiment = {
-
                 "sentiment": latest_news.sentiment,
-
                 "score": latest_news.sentiment_score,
-
             }
+            try:
+                result = fusion_service.fuse(
+                    prediction,
+                    sentiment,
+                )
+            except Exception as e:
+                logger.exception("Failed to fuse sentiment for %s", stock)
 
-            result = fusion_service.fuse(
-                prediction,
-                sentiment,
-            )
-
-        else:
-
+        if result is None:
             result = {
-
                 "prediction": prediction["prediction"],
-
                 "confidence": prediction["confidence"],
-
                 "sentiment": None,
-
                 "sentiment_score": None,
-
                 "technical_signal": "GRU model prediction only.",
-
-                "news_signal": "No recent news available.",
-
+                "news_signal": "No recent news available." if not latest_news else "Sentiment fusion failed.",
                 "final_reason": "Prediction generated without news sentiment.",
-
             }
         
         result["latest_features"] = latest_features
 
         result["latest_candle"] = latest_candle
 
-        result["explanation"] = (
-            explanation_service.explain(
+        try:
+            result["explanation"] = explanation_service.explain(
                 latest_features
             )
-        )
+        except Exception as e:
+            logger.exception("Failed to generate explanation for %s", stock)
+            result["explanation"] = None
 
-        result["market_regime"] = (
-            market_regime_service.analyze(
+        try:
+            result["market_regime"] = market_regime_service.analyze(
                 latest_features
             )
-        )
+        except Exception as e:
+            logger.exception("Failed to analyze market regime for %s", stock)
+            result["market_regime"] = None
 
         result["stock"] = stock.upper()
 
@@ -149,21 +147,17 @@ class LivePredictionService:
 
         result["probability_sell"] = prediction["probability_sell"]
 
-        prediction_history_service.save_prediction(
-
-            db=db,
-
-            symbol=stock.upper(),
-
-            prediction=result["prediction"],
-
-            confidence=result["confidence"],
-
-            probability_buy=result["probability_buy"],
-
-            probability_sell=result["probability_sell"],
-
-        )
+        try:
+            prediction_history_service.save_prediction(
+                db=db,
+                symbol=stock.upper(),
+                prediction=result["prediction"],
+                confidence=result["confidence"],
+                probability_buy=result["probability_buy"],
+                probability_sell=result["probability_sell"],
+            )
+        except Exception as e:
+            logger.exception("Failed to save prediction history for %s", stock)
 
         return result
 

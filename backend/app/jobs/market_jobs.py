@@ -18,18 +18,7 @@ from app.services.news_service import (
     news_service,
 )
 
-STOCKS = (
-    "RELIANCE",
-    "TCS",
-    "INFY",
-    "HDFCBANK",
-    "ICICIBANK",
-    "SBIN",
-    "LT",
-    "ITC",
-    "HINDUNILVR",
-    "BHARTIARTL",
-)
+from app.services.stock_service import stock_service
 
 
 def update_market_data():
@@ -45,28 +34,48 @@ def update_market_data():
         logger.info("=" * 60)
         logger.info("Market synchronization started.")
 
-        for stock in STOCKS:
+        stocks = stock_service.get_all(db)
 
+        processed = 0
+        succeeded = 0
+        failed = 0
+
+        for stock in stocks:
+            processed += 1
             logger.info(
                 "Synchronizing %s",
-                stock,
+                stock.symbol,
             )
 
-            historical_data_service.sync_stock(
-                db=db,
-                symbol=stock,
-            )
+            try:
+                historical_data_service.sync_stock(
+                    db=db,
+                    symbol=stock.symbol,
+                )
 
-            news_service.sync_news(
-                db=db,
-                symbol=stock,
-            )
+                news_service.sync_news(
+                    db=db,
+                    symbol=stock.symbol,
+                )
 
-            live_prediction_service.predict(
-                db=db,
-                stock=stock,
-                sync_news=False,
-            )
+                live_prediction_service.predict(
+                    db=db,
+                    stock=stock.symbol,
+                    sync_news=False,
+                )
+                
+                succeeded += 1
+
+            except Exception as e:
+                logger.exception("Failed to process stock %s", stock.symbol)
+                failed += 1
+
+        logger.info("-" * 50)
+        logger.info("Market Sync Summary")
+        logger.info("Processed : %d", processed)
+        logger.info("Succeeded : %d", succeeded)
+        logger.info("Failed    : %d", failed)
+        logger.info("-" * 50)
 
         logger.info(
             "Evaluating pending predictions."

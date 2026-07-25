@@ -37,12 +37,24 @@ async def lifespan(app: FastAPI):
 
     artifacts.load_artifacts()
 
+    # Application startup -> seed database
+    from app.database import SessionLocal
+    from app.services.seed_service import seed_service
+    db = SessionLocal()
+    try:
+        seed_service.seed_stocks(db)
+    finally:
+        db.close()
+
+    # perform one initial historical synchronization -> start the hourly scheduler
+    from datetime import datetime
     scheduler.add_job(
         update_market_data,
         trigger="interval",
         hours=1,
         id="market_sync",
         replace_existing=True,
+        next_run_time=datetime.now(),
     )
 
     scheduler.start()

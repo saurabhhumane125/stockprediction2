@@ -92,10 +92,20 @@ class RegistryManager:
             
         # Copy and Hash
         manifest = metadata.copy()  # Embed full model contract
+        
+        # Populate tickers from canonical universe config if dataset_version is present
+        dataset_version = manifest.get("dataset_version", "")
+        tickers = []
+        if dataset_version:
+            universe_name = dataset_version.split("/")[0]
+            from ml_engine.data.universe.config import UniverseConfig
+            tickers = UniverseConfig.UNIVERSES.get(universe_name, [])
+            
         manifest.update({
             "model_version": version,
             "authenticity": authenticity,
             "registration_timestamp": pd.Timestamp.utcnow().isoformat(),
+            "tickers": tickers,
             "artifacts": {}
         })
         

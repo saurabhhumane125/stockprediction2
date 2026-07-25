@@ -2,25 +2,18 @@ from sqlalchemy.orm import Session
 
 from app.models import Stock
 
+from app.adapters.universe_adapter import universe_adapter
 
 class SeedService:
 
-    STOCKS = [
-        ("RELIANCE", "Reliance Industries", "Energy"),
-        ("TCS", "Tata Consultancy Services", "IT"),
-        ("INFY", "Infosys", "IT"),
-        ("HDFCBANK", "HDFC Bank", "Banking"),
-        ("ICICIBANK", "ICICI Bank", "Banking"),
-        ("SBIN", "State Bank of India", "Banking"),
-        ("LT", "Larsen & Toubro", "Infrastructure"),
-        ("ITC", "ITC Limited", "FMCG"),
-        ("HINDUNILVR", "Hindustan Unilever", "FMCG"),
-        ("BHARTIARTL", "Bharti Airtel", "Telecom"),
-    ]
-
     def seed_stocks(self, db: Session):
+        
+        metadata_list = universe_adapter.get_active_universe_metadata()
 
-        for symbol, company, sector in self.STOCKS:
+        for metadata in metadata_list:
+            symbol = metadata["symbol"]
+            company = metadata["company_name"]
+            sector = metadata["sector"]
 
             exists = (
                 db.query(Stock)
