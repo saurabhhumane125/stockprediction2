@@ -49,10 +49,18 @@ class VisionInferenceService:
         )
         
         # Extract Prediction metrics
-        pred_class_id = latest_result.get("Predicted Class", 0)
+        if "predicted_class" in latest_result:
+            pred_class_id = latest_result["predicted_class"]
+            prob = latest_result.get("probability", 0.0)
+        elif "predicted_value" in latest_result:
+            pred_val = latest_result["predicted_value"]
+            pred_class_id = 1 if pred_val > 0 else 0
+            prob = 0.5 + min(abs(pred_val), 0.5)
+        else:
+            pred_class_id = 0
+            prob = 0.0
+            
         prediction_str = "UP" if pred_class_id == 1 else "DOWN"
-        
-        prob = latest_result.get("Calibrated Probability", 0.0)
         prob_buy = prob
         prob_sell = 1.0 - prob
         
