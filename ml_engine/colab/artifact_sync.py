@@ -86,3 +86,30 @@ class ArtifactSynchronizer:
         finally:
             if os.path.exists(sync_dir):
                 shutil.rmtree(sync_dir)
+
+    @staticmethod
+    def export_registry_bundle(version: str, registry_base_path: str = "ml_engine/model_registry", output_dir: str = "artifacts"):
+        """
+        Zips up the exact registered candidate directory so the deployment bundle
+        perfectly matches the registry contract.
+        """
+        logger.info(f"=== Artifact Sync: Exporting Registry Bundle for {version} ===")
+        
+        candidate_dir = os.path.join(registry_base_path, "candidate", version)
+        if not os.path.exists(candidate_dir):
+            logger.error(f"[ArtifactSync] Registry candidate not found: {candidate_dir}")
+            return
+            
+        manifest_path = os.path.join(candidate_dir, "manifest.json")
+        if not os.path.exists(manifest_path):
+            logger.error(f"[ArtifactSync] Fatal: manifest.json is missing in {candidate_dir}. This bundle is not deployment-ready.")
+            return
+            
+        os.makedirs(output_dir, exist_ok=True)
+        output_zip_base = os.path.join(output_dir, f"{version}_deployment")
+        
+        try:
+            shutil.make_archive(output_zip_base, 'zip', candidate_dir)
+            logger.info(f"[ArtifactSync] Successfully created deployment bundle: {output_zip_base}.zip")
+        except Exception as e:
+            logger.error(f"[ArtifactSync] Export failed: {e}")

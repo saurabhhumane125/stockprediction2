@@ -135,6 +135,13 @@ class ProductionTrainingRunner:
         # 6. Candidate Artifact Export & Registry
         if self.dry_run or self.export_only:
             self._export_and_register(results)
+            
+        # 7. Generate Deployment Bundle from Registry Candidate
+        try:
+            from ml_engine.colab.artifact_sync import ArtifactSynchronizer
+            ArtifactSynchronizer.export_registry_bundle(results["version"])
+        except Exception as e:
+            logger.error(f"[Runner] Failed to generate deployment bundle: {e}")
         
         return results
 
