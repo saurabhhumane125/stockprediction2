@@ -38,26 +38,32 @@ class LivePredictionService:
         sync_news: bool = True,
     ):
 
-        market_data = live_data_service.fetch(
+        market_data_payload = live_data_service.fetch(
             stock,
         )
 
-        sequence = market_data[
-            "sequence"
+        raw_df = market_data_payload[
+            "raw_df"
         ]
 
-        latest_features = market_data[
-            "latest_features"
+        market_data = market_data_payload[
+            "market_data"
         ]
 
-        latest_candle = market_data[
+        latest_candle = market_data_payload[
             "latest_candle"
         ]
 
         prediction = prediction_service.predict(
             stock=stock,
-            feature_rows=sequence,
+            raw_df=raw_df,
+            market_data=market_data,
         )
+
+        # Extract latest_features from prediction payload for downstream services
+        latest_features = prediction.get("latest_features")
+        if not latest_features:
+            raise RuntimeError("Live prediction failed to produce latest_features.")
 
         if sync_news:
 

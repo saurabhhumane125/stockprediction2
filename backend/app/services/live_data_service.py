@@ -1,11 +1,5 @@
-import numpy as np
 import pandas as pd
 import yfinance as yf
-
-from ta.momentum import RSIIndicator, ROCIndicator
-from ta.trend import ADXIndicator, EMAIndicator, MACD
-from ta.volatility import AverageTrueRange, BollingerBands
-
 
 class LiveDataService:
 
@@ -17,6 +11,7 @@ class LiveDataService:
             interval="1d",
             progress=False,
             auto_adjust=True,
+            actions=True,
         )
 
         if len(df) < 60:
@@ -27,164 +22,59 @@ class LiveDataService:
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
 
-        df.reset_index(inplace=True)
-
-        df["RSI"] = RSIIndicator(df["Close"]).rsi()
-
-        df["MACD"] = MACD(df["Close"]).macd()
-
-        df["EMA20"] = EMAIndicator(
-            df["Close"],
-            window=20,
-        ).ema_indicator()
-
-        df["EMA50"] = EMAIndicator(
-            df["Close"],
-            window=50,
-        ).ema_indicator()
-
-        df["ATR"] = AverageTrueRange(
-            df["High"],
-            df["Low"],
-            df["Close"],
-        ).average_true_range()
-
-        df["ADX"] = ADXIndicator(
-            df["High"],
-            df["Low"],
-            df["Close"],
-        ).adx()
-
-        bb = BollingerBands(df["Close"])
-
-        df["BB_UPPER"] = bb.bollinger_hband()
-        df["BB_LOWER"] = bb.bollinger_lband()
-        df["BB_WIDTH"] = (
-            df["BB_UPPER"] -
-            df["BB_LOWER"]
+        df.index = pd.to_datetime(df.index, utc=True).tz_localize(None)
+        
+        # Ensure corporate actions exist (mimicking training pipeline normalization)
+        if "Dividends" not in df.columns:
+            df["Dividends"] = 0.0
+        if "Stock Splits" not in df.columns:
+            df["Stock Splits"] = 0.0
+        
+        # Download market benchmarks for ML Engine
+        nifty = yf.download(
+            "^NSEI",
+            period="6mo",
+            interval="1d",
+            progress=False,
+            auto_adjust=True,
         )
-
-        df["ROC"] = ROCIndicator(
-            df["Close"]
-        ).roc()
-
-        df["MOMENTUM"] = (
-            df["Close"] -
-            df["Close"].shift(10)
+        if isinstance(nifty.columns, pd.MultiIndex):
+            nifty.columns = nifty.columns.get_level_values(0)
+        nifty.index = pd.to_datetime(nifty.index, utc=True).tz_localize(None)
+            
+        vix = yf.download(
+            "^INDIAVIX",
+            period="6mo",
+            interval="1d",
+            progress=False,
+            auto_adjust=True,
         )
-
-        df["DAILY_RETURN"] = (
-            df["Close"].pct_change()
-        )
-
-        df["VOLATILITY"] = (
-            df["DAILY_RETURN"]
-            .rolling(10)
-            .std()
-        )
-
-        df["VOLUME_CHANGE"] = (
-            df["Volume"]
-            .pct_change()
-        )
-
-        # Match notebook preprocessing
-        df = (
-            df.replace(
-                [np.inf, -np.inf],
-                np.nan,
-            )
-            .dropna()
-            .reset_index(drop=True)
-        )
-
-        if len(df) < 48:
-            raise ValueError(
-                "Not enough valid rows after preprocessing."
-            )
-
-        feature_columns = [
-            "Open",
-            "High",
-            "Low",
-            "Close",
-            "Volume",
-            "RSI",
-            "MACD",
-            "EMA20",
-            "EMA50",
-            "ATR",
-            "ADX",
-            "BB_UPPER",
-            "BB_LOWER",
-            "BB_WIDTH",
-            "ROC",
-            "MOMENTUM",
-            "DAILY_RETURN",
-            "VOLATILITY",
-            "VOLUME_CHANGE",
-        ]
-
-        latest = df.iloc[-1]
-
-        sequence = (
-            df[
-                feature_columns
-            ]
-            .tail(48)
-            .values
-            .tolist()
-        )
-
-        latest_features = {
-
-            column: (
-                float(latest[column])
-                if pd.notna(latest[column])
-                else None
-            )
-
-            for column in feature_columns
-
+        if isinstance(vix.columns, pd.MultiIndex):
+            vix.columns = vix.columns.get_level_values(0)
+        vix.index = pd.to_datetime(vix.index, utc=True).tz_localize(None)
+            
+        market_data = {
+            "^NSEI": nifty,
+            "^INDIAVIX": vix
         }
 
+        latest = df.iloc[-1]
+        
+        latest_date_str = str(latest.name.date()) if hasattr(latest.name, 'date') else str(latest.name)
+
         latest_candle = {
-
-            "date": str(
-                latest["Date"].date()
-            ),
-
-            "open": float(
-                latest["Open"]
-            ),
-
-            "high": float(
-                latest["High"]
-            ),
-
-            "low": float(
-                latest["Low"]
-            ),
-
-            "close": float(
-                latest["Close"]
-            ),
-
-            "volume": float(
-                latest["Volume"]
-            ),
-
+            "date": latest_date_str,
+            "open": float(latest["Open"]),
+            "high": float(latest["High"]),
+            "low": float(latest["Low"]),
+            "close": float(latest["Close"]),
+            "volume": float(latest["Volume"]),
         }
 
         return {
-
-            "sequence": sequence,
-
-            "latest_features": latest_features,
-
+            "raw_df": df,
+            "market_data": market_data,
             "latest_candle": latest_candle,
-
         }
-
 
 live_data_service = LiveDataService()
